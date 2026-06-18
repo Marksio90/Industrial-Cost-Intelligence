@@ -1,0 +1,1118 @@
+openapi: "3.1.0"
+info:
+  title: Material Intelligence Engine API
+  version: "1.0.0"
+  description: |
+    REST API for the Material Intelligence Engine module.
+    Provides access to material master data, properties, pricing, substitutions,
+    process compatibility, supplier mappings, and AI-powered search.
+  contact:
+    name: Industrial Cost Intelligence Platform
+    email: api@industrial-cost-intelligence.com
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.industrial-cost-intelligence.com/v1/materials
+    description: Production
+  - url: https://api-staging.industrial-cost-intelligence.com/v1/materials
+    description: Staging
+
+tags:
+  - name: Materials
+    description: Material master data CRUD
+  - name: Properties
+    description: Physical and mechanical properties
+  - name: Prices
+    description: Market prices and forecasts
+  - name: Substitutions
+    description: Material substitution engine
+  - name: Compatibility
+    description: Process-material compatibility
+  - name: Suppliers
+    description: Supplier-material mappings
+  - name: Search
+    description: Full-text and semantic search
+  - name: Taxonomy
+    description: Material category hierarchy
+  - name: AI
+    description: AI-powered features (embeddings, semantic search)
+
+paths:
+
+  # ===========================================================================
+  # MATERIALS
+  # ===========================================================================
+
+  /materials:
+    get:
+      tags: [Materials]
+      operationId: listMaterials
+      summary: List materials with filtering and pagination
+      parameters:
+        - name: material_class
+          in: query
+          schema:
+            type: string
+            enum: [METAL, POLYMER, WOOD, PACKAGING, COMPOSITE, SPECIAL]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVE, PHASED_OUT, REPLACED, DRAFT, DISCONTINUED]
+          default: ACTIVE
+        - name: grade
+          in: query
+          schema:
+            type: string
+          example: "S355"
+        - name: form_factor
+          in: query
+          schema:
+            type: string
+        - name: category_code
+          in: query
+          schema:
+            type: string
+          example: "MET.CS.HR"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [material_code, material_name, grade, updated_at]
+            default: material_code
+        - name: sort_order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+      responses:
+        "200":
+          description: Paginated list of materials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Materials]
+      operationId: createMaterial
+      summary: Create a new material
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMaterialRequest"
+      responses:
+        "201":
+          description: Material created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /materials/{material_id}:
+    parameters:
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Materials]
+      operationId: getMaterial
+      summary: Get material by ID
+      parameters:
+        - name: include
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [properties, mechanical, standards, cost_coefficients, prices, substitutions, compatibility, suppliers]
+          style: form
+          explode: false
+      responses:
+        "200":
+          description: Material detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags: [Materials]
+      operationId: updateMaterial
+      summary: Update material (full replacement)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMaterialRequest"
+      responses:
+        "200":
+          description: Material updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialDetail"
+        "409":
+          description: Version conflict (optimistic locking)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionConflictError"
+
+    patch:
+      tags: [Materials]
+      operationId: patchMaterial
+      summary: Partial update of material
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchMaterialRequest"
+      responses:
+        "200":
+          description: Material updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialDetail"
+
+    delete:
+      tags: [Materials]
+      operationId: deactivateMaterial
+      summary: Deactivate material (soft delete — sets status to DISCONTINUED)
+      parameters:
+        - name: reason
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Material deactivated
+        "409":
+          description: Cannot deactivate — material has active references
+
+  # ===========================================================================
+  # PROPERTIES
+  # ===========================================================================
+
+  /materials/{material_id}/properties:
+    parameters:
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Properties]
+      operationId: getMaterialProperties
+      summary: Get physical properties of a material
+      responses:
+        "200":
+          description: Physical properties
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialProperties"
+
+    put:
+      tags: [Properties]
+      operationId: upsertMaterialProperties
+      summary: Create or update physical properties
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaterialPropertiesInput"
+      responses:
+        "200":
+          description: Properties updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialProperties"
+
+  /materials/{material_id}/mechanical-properties:
+    parameters:
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Properties]
+      operationId: getMechanicalProperties
+      summary: Get mechanical properties
+      responses:
+        "200":
+          description: Mechanical properties
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MechanicalProperties"
+
+  # ===========================================================================
+  # PRICES
+  # ===========================================================================
+
+  /materials/{material_id}/prices:
+    parameters:
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Prices]
+      operationId: getMaterialPrices
+      summary: Get price history for material
+      parameters:
+        - name: price_type
+          in: query
+          schema:
+            type: string
+            enum: [MARKET_INDEX, PURCHASE, QUOTED, FORECAST]
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: currency
+          in: query
+          schema:
+            type: string
+            default: EUR
+        - name: region
+          in: query
+          schema:
+            type: string
+            default: EU
+      responses:
+        "200":
+          description: Price history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceHistoryResponse"
+
+  /materials/{material_id}/prices/current:
+    parameters:
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Prices]
+      operationId: getCurrentPrice
+      summary: Get current purchase price
+      parameters:
+        - name: currency
+          in: query
+          schema:
+            type: string
+            default: EUR
+      responses:
+        "200":
+          description: Current price
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentPriceResponse"
+        "404":
+          description: No price data available
+
+  /materials/{material_id}/prices/forecast:
+    parameters:
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Prices]
+      operationId: getPriceForecast
+      summary: Get price forecast
+      parameters:
+        - name: horizon_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90, 180]
+            default: 30
+        - name: currency
+          in: query
+          schema:
+            type: string
+            default: EUR
+      responses:
+        "200":
+          description: Price forecast
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceForecastResponse"
+
+  /materials/{material_id}/cost:
+    parameters:
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Prices]
+      operationId: calculateMaterialCost
+      summary: Calculate material cost for given net mass
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaterialCostRequest"
+      responses:
+        "200":
+          description: Material cost breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialCostResponse"
+
+  # ===========================================================================
+  # SUBSTITUTIONS
+  # ===========================================================================
+
+  /materials/{material_id}/substitutions:
+    parameters:
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Substitutions]
+      operationId: getSubstitutions
+      summary: Get substitutes for a material
+      parameters:
+        - name: min_score
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            maximum: 100
+            default: 50
+        - name: substitution_type
+          in: query
+          schema:
+            type: string
+            enum: [DIRECT, CONDITIONAL, PARTIAL, PROCESS_CHANGE_NEEDED]
+        - name: process_codes
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: false
+          description: Filter substitutes compatible with these processes
+      responses:
+        "200":
+          description: Substitution options ranked by score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubstitutionListResponse"
+
+  /materials/{material_id}/substitutions/evaluate:
+    parameters:
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Substitutions]
+      operationId: evaluateSubstitute
+      summary: Evaluate a specific candidate material as substitute
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubstitutionEvaluationRequest"
+      responses:
+        "200":
+          description: Substitution evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubstitutionEvaluationResponse"
+
+  # ===========================================================================
+  # COMPATIBILITY
+  # ===========================================================================
+
+  /materials/{material_id}/compatibility:
+    parameters:
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Compatibility]
+      operationId: getMaterialCompatibility
+      summary: Get process compatibility matrix for material
+      parameters:
+        - name: process_category
+          in: query
+          schema:
+            type: string
+            enum: [CUTTING, FORMING, WELDING, MACHINING, COATING, MOLDING, ASSEMBLY]
+        - name: min_level
+          in: query
+          schema:
+            type: string
+            enum: [OPTIMAL, ACCEPTABLE, POSSIBLE_WITH_CAUTION]
+      responses:
+        "200":
+          description: Compatibility matrix
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompatibilityResponse"
+
+  /materials/{material_id}/compatibility/{process_code}:
+    parameters:
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: process_code
+        in: path
+        required: true
+        schema:
+          type: string
+          example: LASER_FIBER
+    get:
+      tags: [Compatibility]
+      operationId: getProcessCompatibility
+      summary: Get compatibility for specific process
+      responses:
+        "200":
+          description: Process compatibility detail with parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessCompatibilityDetail"
+        "404":
+          description: No compatibility record for this combination
+
+  # ===========================================================================
+  # SEARCH
+  # ===========================================================================
+
+  /search:
+    get:
+      tags: [Search]
+      operationId: searchMaterials
+      summary: Full-text search across materials
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "stainless steel sheet 304"
+        - name: material_class
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: false
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Search results with relevance scores
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+
+  /search/semantic:
+    post:
+      tags: [Search, AI]
+      operationId: semanticSearchMaterials
+      summary: Semantic (vector) search using natural language
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SemanticSearchRequest"
+      responses:
+        "200":
+          description: Semantically similar materials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticSearchResponse"
+
+  # ===========================================================================
+  # TAXONOMY
+  # ===========================================================================
+
+  /taxonomy:
+    get:
+      tags: [Taxonomy]
+      operationId: getTaxonomyTree
+      summary: Get full taxonomy tree
+      parameters:
+        - name: max_depth
+          in: query
+          schema:
+            type: integer
+            default: 5
+            minimum: 1
+            maximum: 5
+        - name: include_material_counts
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Taxonomy tree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxonomyTreeResponse"
+
+  /taxonomy/{category_code}/materials:
+    parameters:
+      - name: category_code
+        in: path
+        required: true
+        schema:
+          type: string
+          example: MET.CS.HR
+    get:
+      tags: [Taxonomy]
+      operationId: getMaterialsByCategory
+      summary: Get materials in a category (includes descendants)
+      parameters:
+        - name: include_descendants
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVE, PHASED_OUT, REPLACED, DRAFT, DISCONTINUED]
+          default: ACTIVE
+      responses:
+        "200":
+          description: Materials in category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialListResponse"
+
+# ===========================================================================
+# COMPONENTS
+# ===========================================================================
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+
+    MaterialSummary:
+      type: object
+      properties:
+        material_id:        { type: string, format: uuid }
+        material_code:      { type: string }
+        material_name:      { type: string }
+        material_class:     { type: string }
+        grade:              { type: string }
+        form_factor:        { type: string }
+        status:             { type: string }
+        density_kg_m3:      { type: number }
+        current_price_eur_kg: { type: number }
+        price_date:         { type: string, format: date }
+        updated_at:         { type: string, format: date-time }
+
+    MaterialDetail:
+      allOf:
+        - $ref: "#/components/schemas/MaterialSummary"
+        - type: object
+          properties:
+            material_subclass:   { type: string }
+            description:         { type: string }
+            erp_material_number: { type: string }
+            customs_tariff_code: { type: string }
+            is_hazardous:        { type: boolean }
+            regulatory_flags:    { type: object }
+            version:             { type: integer }
+            properties:
+              $ref: "#/components/schemas/MaterialProperties"
+            mechanical_properties:
+              type: array
+              items:
+                $ref: "#/components/schemas/MechanicalProperties"
+            standards:
+              type: array
+              items:
+                $ref: "#/components/schemas/MaterialStandard"
+            cost_coefficients:
+              $ref: "#/components/schemas/CostCoefficients"
+
+    MaterialProperties:
+      type: object
+      properties:
+        density_kg_m3:             { type: number, example: 7850 }
+        density_tolerance_pct:     { type: number }
+        density_source:            { type: string }
+        thermal_conductivity_w_mk: { type: number }
+        thermal_expansion_1e6_k:   { type: number }
+        melting_point_c:           { type: number }
+        max_service_temp_c:        { type: number }
+        min_service_temp_c:        { type: number }
+        unit_of_measure:           { type: string }
+        standard_thickness_mm:     { type: number }
+        standard_width_mm:         { type: number }
+        surface_finish:            { type: string }
+
+    MechanicalProperties:
+      type: object
+      properties:
+        tensile_strength_mpa:   { type: number }
+        yield_strength_mpa:     { type: number }
+        elongation_pct:         { type: number }
+        hardness_hb:            { type: number }
+        youngs_modulus_gpa:     { type: number }
+        condition:              { type: string }
+        test_standard:          { type: string }
+        temperature_c:          { type: number, default: 20 }
+
+    MaterialStandard:
+      type: object
+      properties:
+        standard_system:        { type: string }
+        standard_number:        { type: string }
+        standard_grade:         { type: string }
+        standard_year:          { type: integer }
+        is_primary:             { type: boolean }
+        equivalence_type:       { type: string }
+        certificate_required:   { type: boolean }
+        certificate_type:       { type: string }
+
+    CostCoefficients:
+      type: object
+      properties:
+        scrap_rate_pct:              { type: number }
+        yield_rate_pct:              { type: number }
+        machining_allowance_mm:      { type: number }
+        handling_cost_pct:           { type: number }
+        storage_cost_pct_month:      { type: number }
+        certification_cost_eur_kg:   { type: number }
+        cutting_waste_pct:           { type: number }
+        nesting_efficiency_pct:      { type: number }
+        currency:                    { type: string }
+        valid_from:                  { type: string, format: date }
+
+    CurrentPriceResponse:
+      type: object
+      properties:
+        material_id:    { type: string, format: uuid }
+        price_value:    { type: number }
+        currency:       { type: string }
+        unit:           { type: string }
+        price_date:     { type: string, format: date }
+        source:         { type: string }
+        confidence:     { type: integer, minimum: 1, maximum: 5 }
+
+    PriceHistoryResponse:
+      type: object
+      properties:
+        material_id: { type: string, format: uuid }
+        currency:    { type: string }
+        unit:        { type: string }
+        prices:
+          type: array
+          items:
+            type: object
+            properties:
+              price_date:  { type: string, format: date }
+              price_value: { type: number }
+              price_type:  { type: string }
+              source:      { type: string }
+
+    PriceForecastResponse:
+      type: object
+      properties:
+        material_id:    { type: string, format: uuid }
+        horizon_days:   { type: integer }
+        currency:       { type: string }
+        forecasts:
+          type: array
+          items:
+            type: object
+            properties:
+              forecast_date:  { type: string, format: date }
+              price_forecast: { type: number }
+              price_lower_95: { type: number }
+              price_upper_95: { type: number }
+        model_name:     { type: string }
+        mape_pct:       { type: number }
+
+    MaterialCostRequest:
+      type: object
+      required: [net_mass_kg]
+      properties:
+        net_mass_kg:  { type: number, minimum: 0.001 }
+        supplier_id:  { type: string, format: uuid }
+        currency:     { type: string, default: EUR }
+
+    MaterialCostResponse:
+      type: object
+      properties:
+        net_mass_kg:      { type: number }
+        gross_mass_kg:    { type: number }
+        purchase_mass_kg: { type: number }
+        base_price:       { type: number }
+        currency:         { type: string }
+        material_cost:    { type: number }
+        scrap_recovery:   { type: number }
+        handling_cost:    { type: number }
+        cert_cost:        { type: number }
+        total_cost:       { type: number }
+        cost_per_kg_net:  { type: number }
+
+    SubstitutionListResponse:
+      type: object
+      properties:
+        source_material_id: { type: string, format: uuid }
+        substitutes:
+          type: array
+          items:
+            type: object
+            properties:
+              substitute_material_id: { type: string, format: uuid }
+              substitute_code:        { type: string }
+              substitute_name:        { type: string }
+              substitution_type:      { type: string }
+              compatibility_score:    { type: number }
+              cost_impact_pct:        { type: number }
+              weight_impact_pct:      { type: number }
+              go_nogo:                { type: string, enum: [GO, CONDITIONAL, NOGO] }
+              engineering_approval_required: { type: boolean }
+
+    SubstitutionEvaluationRequest:
+      type: object
+      required: [candidate_material_id]
+      properties:
+        candidate_material_id: { type: string, format: uuid }
+        process_codes:
+          type: array
+          items:
+            type: string
+        application_context: { type: string }
+
+    SubstitutionEvaluationResponse:
+      type: object
+      properties:
+        source_material_id:    { type: string, format: uuid }
+        candidate_material_id: { type: string, format: uuid }
+        go_nogo:               { type: string }
+        total_score:           { type: number }
+        breakdown:
+          type: object
+          properties:
+            mechanical_compatibility: { type: number }
+            process_compatibility:    { type: number }
+            cost_impact:              { type: number }
+            availability:             { type: number }
+            regulatory_compliance:    { type: number }
+        conditions:   { type: array, items: { type: string } }
+        warnings:     { type: array, items: { type: string } }
+
+    CompatibilityResponse:
+      type: object
+      properties:
+        material_id: { type: string, format: uuid }
+        compatibility_matrix:
+          type: array
+          items:
+            type: object
+            properties:
+              process_code:         { type: string }
+              process_category:     { type: string }
+              compatibility_level:  { type: string }
+              speed_factor:         { type: number }
+              waste_factor_pct:     { type: number }
+
+    ProcessCompatibilityDetail:
+      type: object
+      properties:
+        material_id:           { type: string, format: uuid }
+        process_code:          { type: string }
+        compatibility_level:   { type: string }
+        speed_factor:          { type: number }
+        min_thickness_mm:      { type: number }
+        max_thickness_mm:      { type: number }
+        quality_notes:         { type: string }
+        tooling_requirements:  { type: string }
+        parameters:            { type: object }
+        waste_factor_pct:      { type: number }
+
+    SearchResponse:
+      type: object
+      properties:
+        query:       { type: string }
+        total:       { type: integer }
+        page:        { type: integer }
+        page_size:   { type: integer }
+        results:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/MaterialSummary"
+              - type: object
+                properties:
+                  relevance_score: { type: number }
+                  highlights:      { type: object }
+
+    SemanticSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          example: "high strength steel sheet suitable for welding and powder coating"
+        top_k:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 50
+        material_class_filter:
+          type: array
+          items:
+            type: string
+        min_similarity:
+          type: number
+          default: 0.7
+
+    SemanticSearchResponse:
+      type: object
+      properties:
+        query:   { type: string }
+        results:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/MaterialSummary"
+              - type: object
+                properties:
+                  similarity_score: { type: number }
+                  embedding_model:  { type: string }
+
+    TaxonomyTreeResponse:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              category_id:      { type: string, format: uuid }
+              category_code:    { type: string }
+              category_name:    { type: string }
+              hierarchy_level:  { type: integer }
+              parent_id:        { type: string, format: uuid, nullable: true }
+              material_count:   { type: integer }
+              children:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaxonomyTreeResponse/properties/nodes/items"
+
+    MaterialListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaterialSummary"
+        pagination:
+          type: object
+          properties:
+            page:       { type: integer }
+            page_size:  { type: integer }
+            total:      { type: integer }
+            total_pages:{ type: integer }
+
+    CreateMaterialRequest:
+      type: object
+      required: [material_code, material_name, material_class, category_id]
+      properties:
+        material_code:       { type: string, maxLength: 50 }
+        material_name:       { type: string, maxLength: 200 }
+        material_name_short: { type: string, maxLength: 60 }
+        category_id:         { type: string, format: uuid }
+        material_class:      { type: string }
+        grade:               { type: string }
+        form_factor:         { type: string }
+        description:         { type: string }
+        erp_material_number: { type: string }
+        customs_tariff_code: { type: string }
+        is_hazardous:        { type: boolean, default: false }
+
+    UpdateMaterialRequest:
+      allOf:
+        - $ref: "#/components/schemas/CreateMaterialRequest"
+        - type: object
+          required: [version]
+          properties:
+            version: { type: integer }
+
+    PatchMaterialRequest:
+      type: object
+      properties:
+        material_name:       { type: string }
+        description:         { type: string }
+        status:              { type: string }
+        erp_material_number: { type: string }
+        version:             { type: integer }
+
+    MaterialPropertiesInput:
+      type: object
+      properties:
+        density_kg_m3:             { type: number }
+        thermal_conductivity_w_mk: { type: number }
+        thermal_expansion_1e6_k:   { type: number }
+        max_service_temp_c:        { type: number }
+        unit_of_measure:           { type: string }
+        standard_thickness_mm:     { type: number }
+        standard_width_mm:         { type: number }
+        surface_finish:            { type: string }
+
+    VersionConflictError:
+      type: object
+      properties:
+        error:            { type: string }
+        current_version:  { type: integer }
+        submitted_version:{ type: integer }
+        message:          { type: string }
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:    { type: string }
+        message:  { type: string }
+        details:  { type: array, items: { type: object } }
+        trace_id: { type: string }
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Authentication required
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Resource conflict (duplicate or version mismatch)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
