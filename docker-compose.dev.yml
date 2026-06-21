@@ -1,0 +1,147 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# ICI Platform — Development Overrides
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# ═══════════════════════════════════════════════════════════════════════════════
+services:
+
+  backend:
+    build:
+      target: development
+    command: >
+      uvicorn src.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/src
+      --log-level debug
+    environment:
+      DEBUG: "true"
+      LOG_JSON: "false"
+      LOG_LEVEL: DEBUG
+    volumes:
+      # Full bind-mount for live reload
+      - ./backend:/app
+      - /app/.venv             # preserve venv inside container
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      target: development
+    command: >
+      watchmedo auto-restart
+      --directory=/app/src
+      --pattern="*.py"
+      --recursive
+      -- python -m arq src.worker.WorkerSettings
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+    environment:
+      LOG_JSON: "false"
+      LOG_LEVEL: DEBUG
+
+  ml-inference:
+    build:
+      target: development
+    command: >
+      uvicorn cost_prediction.inference.api:app
+      --host 0.0.0.0
+      --port 8002
+      --reload
+      --reload-dir /app
+      --log-level debug
+    environment:
+      ML_USE_MOCK_EMBEDDER: "true"
+    volumes:
+      - ./ml:/app
+      - /app/.venv
+      - ml_models:/app/.cache/huggingface
+    ports:
+      - "8002:8002"
+
+  rfq-agent:
+    build:
+      target: development
+    command: >
+      uvicorn rfq_agent.main:create_api
+      --host 0.0.0.0
+      --port 8001
+      --reload
+      --reload-dir /app
+      --log-level debug
+    volumes:
+      - ./agents:/app
+      - /app/.venv
+    environment:
+      RFQ_PLAYWRIGHT_HEADLESS: "true"
+      LOG_JSON: "false"
+    profiles: []   # always start in dev
+
+  postgres:
+    ports:
+      - "5432:5432"
+    # Verbose logging in dev
+    command: >
+      postgres
+      -c log_statement=all
+      -c log_duration=on
+      -c log_min_duration_statement=100
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  qdrant:
+    environment:
+      QDRANT__LOG_LEVEL: DEBUG
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+
+  mlflow:
+    ports:
+      - "5000:5000"
+
+  # ── Dev-only tools ────────────────────────────────────────────────────────
+
+  # pgAdmin for database inspection
+  pgadmin:
+    image: dpage/pgadmin4:8.6
+    container_name: ici_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@ici.local
+      PGADMIN_DEFAULT_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    volumes:
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    networks:
+      - ici_data
+      - ici_public
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Redis Commander for queue inspection
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: ici_redis_commander
+    environment:
+      REDIS_HOSTS: "cache:redis:6379:0:${REDIS_PASSWORD},queue:redis:6379:1:${REDIS_PASSWORD},pubsub:redis:6379:2:${REDIS_PASSWORD}"
+    networks:
+      - ici_data
+      - ici_public
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Observability always-on in dev ────────────────────────────────────────
+  prometheus:
+    profiles: []
+
+  grafana:
+    profiles: []

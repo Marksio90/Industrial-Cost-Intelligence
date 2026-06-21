@@ -1,0 +1,76 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  scrape_timeout:      10s
+  external_labels:
+    environment: '${ENVIRONMENT:-development}'
+    project:     'ici'
+
+# Alerting rules (loaded from rules/ directory)
+rule_files:
+  - "rules/*.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []   # add alertmanager:9093 when deployed
+
+scrape_configs:
+
+  # ── Prometheus self-monitoring ─────────────────────────────────────────────
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ── ICI Backend ───────────────────────────────────────────────────────────
+  - job_name: 'ici-backend'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['backend:8000']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # ── ICI ML Inference ──────────────────────────────────────────────────────
+  - job_name: 'ici-ml-inference'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['ml-inference:8002']
+
+  # ── ICI RFQ Agent ─────────────────────────────────────────────────────────
+  - job_name: 'ici-rfq-agent'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['rfq-agent:8001']
+
+  # ── PostgreSQL (via postgres_exporter) ────────────────────────────────────
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+    metrics_path: '/metrics'
+    # Uses pg_stat_statements; exporter is sidecar if deployed
+    # For built-in metrics, backend exposes /metrics/db
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    # redis_exporter sidecar; alternatively backend /metrics/redis
+
+  # ── Qdrant ────────────────────────────────────────────────────────────────
+  - job_name: 'qdrant'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['qdrant:6333']
+
+  # ── MLflow ────────────────────────────────────────────────────────────────
+  - job_name: 'mlflow'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['mlflow:5000']
+
+  # ── NGINX ─────────────────────────────────────────────────────────────────
+  - job_name: 'nginx'
+    metrics_path: '/stub_status'
+    static_configs:
+      - targets: ['nginx:80']

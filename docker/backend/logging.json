@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "json": {
+      "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+      "format": "%(asctime)s %(name)s %(levelname)s %(message)s",
+      "datefmt": "%Y-%m-%dT%H:%M:%S"
+    },
+    "plain": {
+      "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+      "datefmt": "%Y-%m-%dT%H:%M:%S"
+    }
+  },
+  "handlers": {
+    "console": {
+      "class": "logging.StreamHandler",
+      "stream": "ext://sys.stdout",
+      "formatter": "json"
+    }
+  },
+  "loggers": {
+    "uvicorn": {
+      "handlers": ["console"],
+      "level": "INFO",
+      "propagate": false
+    },
+    "uvicorn.error": {
+      "handlers": ["console"],
+      "level": "INFO",
+      "propagate": false
+    },
+    "uvicorn.access": {
+      "handlers": ["console"],
+      "level": "WARNING",
+      "propagate": false
+    },
+    "fastapi": {
+      "handlers": ["console"],
+      "level": "INFO",
+      "propagate": false
+    },
+    "sqlalchemy.engine": {
+      "handlers": ["console"],
+      "level": "WARNING",
+      "propagate": false
+    },
+    "alembic": {
+      "handlers": ["console"],
+      "level": "INFO",
+      "propagate": false
+    },
+    "arq": {
+      "handlers": ["console"],
+      "level": "INFO",
+      "propagate": false
+    },
+    "src": {
+      "handlers": ["console"],
+      "level": "INFO",
+      "propagate": false
+    }
+  },
+  "root": {
+    "handlers": ["console"],
+    "level": "WARNING"
+  }
+}
