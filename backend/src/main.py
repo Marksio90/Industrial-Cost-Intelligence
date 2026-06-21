@@ -24,6 +24,7 @@ from .modules.rfq.api.routes import router as rfq_router
 from .modules.quotes.api.routes import router as quotes_router
 from .modules.forecasting.api.routes import router as forecasting_router
 from .modules.risk.api.routes import router as risk_router
+from .modules.search.api.routes import router as search_router
 
 settings = get_settings()
 logger = structlog.get_logger(__name__)
@@ -144,6 +145,7 @@ def create_app() -> FastAPI:
     app.include_router(quotes_router,      prefix=f"{API_PREFIX}/quotes",      tags=["Quotes"])
     app.include_router(forecasting_router, prefix=f"{API_PREFIX}/forecasting", tags=["Forecasting"])
     app.include_router(risk_router,        prefix=f"{API_PREFIX}/risk",        tags=["Risk"])
+    app.include_router(search_router,     prefix=f"{API_PREFIX}/search",      tags=["Search"])
 
     return app
 
