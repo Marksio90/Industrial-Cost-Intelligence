@@ -139,6 +139,19 @@ services:
       redis:
         condition: service_healthy
 
+  # Mailhog — catches all outbound SMTP in dev (no real emails sent)
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: ici_mailhog
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI → http://localhost:8025
+    networks:
+      - ici_app
+    labels:
+      com.ici.service: "mailhog"
+      com.ici.tier: "dev-tool"
+
   # ── Observability always-on in dev ────────────────────────────────────────
   prometheus:
     profiles: []
