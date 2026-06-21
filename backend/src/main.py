@@ -16,6 +16,11 @@ from .logging_config import configure_logging
 from .observability import configure_logging as obs_configure_logging, configure_tracing
 from .observability.middleware import ObservabilityMiddleware, prometheus_metrics_endpoint
 from .observability.incident_detector import build_default_detector
+from .security.api_hardening import (
+    SecurityHeadersMiddleware,
+    RateLimitMiddleware,
+    RequestValidationMiddleware,
+)
 
 # Module routers
 from .modules.materials.api.routes import router as materials_router
@@ -71,6 +76,13 @@ def create_app() -> FastAPI:
     )
 
     # ── Middleware ────────────────────────────────────────────────────────────
+    # Outermost first — evaluated in reverse registration order by Starlette.
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(
+        RateLimitMiddleware,
+        redis_url=getattr(settings, "redis_cache_url", None),
+    )
+    app.add_middleware(RequestValidationMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
