@@ -13,7 +13,9 @@ from .config import get_settings
 from .database import engine, Base
 from .exceptions import DomainError, ApplicationError
 from .logging_config import configure_logging
-from .middleware.observability import RequestLoggingMiddleware, metrics_endpoint
+from .observability import configure_logging as obs_configure_logging, configure_tracing
+from .observability.middleware import ObservabilityMiddleware, prometheus_metrics_endpoint
+from .observability.incident_detector import build_default_detector
 
 # Module routers
 from .modules.materials.api.routes import router as materials_router
@@ -32,34 +34,30 @@ logger = structlog.get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    configure_logging(level=settings.log_level, json_logs=settings.log_json)
+    obs_configure_logging(level=settings.log_level, json_logs=settings.log_json)
     logger.info("startup", version=settings.app_version, env=settings.environment)
 
     if settings.otel_enabled:
-        _configure_otel()
+        configure_tracing(
+            service_name=settings.otel_service_name,
+            endpoint=settings.otel_endpoint,
+            environment=settings.environment,
+            version=settings.app_version,
+        )
+
+    # Start incident detector as background task
+    redis_url = getattr(settings, "redis_cache_url", None)
+    detector = build_default_detector(redis_url=redis_url)
+    import asyncio
+    detector_task = asyncio.create_task(detector.run())
+    app.state.incident_detector = detector
 
     yield
 
+    detector_task.cancel()
     await engine.dispose()
     logger.info("shutdown")
 
-
-def _configure_otel() -> None:
-    from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    from opentelemetry.sdk.resources import Resource
-
-    provider = TracerProvider(
-        resource=Resource({"service.name": settings.otel_service_name})
-    )
-    provider.add_span_processor(
-        BatchSpanProcessor(OTLPSpanExporter(endpoint=settings.otel_endpoint))
-    )
-    trace.set_tracer_provider(provider)
-    FastAPIInstrumentor.instrument()
 
 
 def create_app() -> FastAPI:
@@ -80,7 +78,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(ObservabilityMiddleware)
 
     # ── Exception Handlers ────────────────────────────────────────────────────
     @app.exception_handler(DomainError)
@@ -123,7 +121,7 @@ def create_app() -> FastAPI:
     # ── Routes ────────────────────────────────────────────────────────────────
     API_PREFIX = "/api/v1"
 
-    app.add_route("/metrics", metrics_endpoint)
+    app.add_route("/metrics", prometheus_metrics_endpoint)
 
     @app.get("/health", tags=["infra"])
     async def health() -> dict[str, Any]:
