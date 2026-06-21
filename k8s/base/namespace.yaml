@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ici
+  labels:
+    app.kubernetes.io/name: ici
+    app.kubernetes.io/managed-by: kubectl
+    environment: production
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ici-observability
+  labels:
+    app.kubernetes.io/name: ici-observability
+    app.kubernetes.io/managed-by: kubectl

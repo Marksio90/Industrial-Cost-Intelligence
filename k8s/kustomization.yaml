@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ici
+
+resources:
+  # Base
+  - base/namespace.yaml
+  - base/resource-quota.yaml
+  - base/network-policy.yaml
+
+  # RBAC
+  - rbac/service-accounts.yaml
+
+  # Config & Secrets
+  - configmaps/app-config.yaml
+  - secrets/secrets-template.yaml   # replace with ESO SecretStore in CI/CD
+
+  # Storage
+  - storage/persistent-volumes.yaml
+
+  # Workloads
+  - deployments/backend.yaml
+  - deployments/worker.yaml
+  - deployments/ml-inference.yaml
+
+  # Services
+  - services/services.yaml
+
+  # Ingress
+  - ingress/ingress.yaml
+
+  # Scaling
+  - hpa/hpa.yaml
+
+  # Observability (separate namespace)
+  - observability/prometheus.yaml
+  - observability/grafana.yaml
+  - observability/loki.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/version:    "1.0.0"

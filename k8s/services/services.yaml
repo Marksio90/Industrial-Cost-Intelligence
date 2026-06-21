@@ -1,0 +1,154 @@
+# ── Backend API ───────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: ici-backend
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      ici-backend
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of:   ici
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port:   "8000"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ici-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+---
+# ── ML Inference ──────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: ici-ml-inference
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      ici-ml-inference
+    app.kubernetes.io/component: ml
+    app.kubernetes.io/part-of:   ici
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port:   "8002"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ici-ml-inference
+  ports:
+    - name: http
+      port: 8002
+      targetPort: http
+      protocol: TCP
+---
+# ── RFQ Agent ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: ici-rfq-agent
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      ici-rfq-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of:   ici
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ici-rfq-agent
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http
+      protocol: TCP
+---
+# ── PostgreSQL ────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of:   ici
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+---
+# ── Redis ─────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-master
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of:   ici
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/role: master
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+      protocol: TCP
+---
+# ── Qdrant ────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      qdrant
+    app.kubernetes.io/component: vector-db
+    app.kubernetes.io/part-of:   ici
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port:   "6333"
+    prometheus.io/path:   "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: qdrant
+  ports:
+    - name: http
+      port: 6333
+      targetPort: 6333
+      protocol: TCP
+    - name: grpc
+      port: 6334
+      targetPort: 6334
+      protocol: TCP
+---
+# ── MLflow ────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      mlflow
+    app.kubernetes.io/component: mlops
+    app.kubernetes.io/part-of:   ici
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mlflow
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+      protocol: TCP

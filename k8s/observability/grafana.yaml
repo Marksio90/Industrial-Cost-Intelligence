@@ -1,0 +1,242 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: ici-observability
+  labels:
+    app.kubernetes.io/name: grafana
+data:
+  grafana.ini: |
+    [server]
+    root_url = https://admin.ici.example.com/grafana/
+    serve_from_sub_path = true
+
+    [security]
+    admin_user = admin
+    disable_gravatar = true
+    cookie_secure = true
+    cookie_samesite = strict
+
+    [auth]
+    disable_login_form = false
+    oauth_auto_login = false
+
+    [analytics]
+    reporting_enabled = false
+    check_for_updates = false
+
+    [log]
+    mode = console
+    level = warn
+
+    [metrics]
+    enabled = true
+
+    [database]
+    type = sqlite3
+    path = /var/lib/grafana/grafana.db
+
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.ici-observability.svc.cluster.local:9090
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: "15s"
+          queryTimeout: "60s"
+          httpMethod: POST
+
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.ici-observability.svc.cluster.local:3100
+        editable: false
+        jsonData:
+          maxLines: 1000
+
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: ICI Dashboards
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 60
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+          foldersFromFilesStructure: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: ici-observability
+  labels:
+    app.kubernetes.io/name:      grafana
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of:   ici-observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name:      grafana
+        app.kubernetes.io/component: monitoring
+        app.kubernetes.io/part-of:   ici-observability
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser:    472   # Grafana's built-in user
+        runAsGroup:   472
+        fsGroup:      472
+        seccompProfile:
+          type: RuntimeDefault
+
+      initContainers:
+        - name: init-chown
+          image: busybox:1.36
+          command: ["chown", "-R", "472:472", "/var/lib/grafana"]
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+          resources:
+            requests: { cpu: "10m", memory: "16Mi" }
+            limits:   { cpu: "50m", memory: "32Mi" }
+
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.4.2
+          ports:
+            - name: http
+              containerPort: 3000
+
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ici-secrets
+                  key:  GRAFANA_ADMIN_USER
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ici-secrets
+                  key:  GRAFANA_ADMIN_PASSWORD
+            - name: GF_PATHS_CONFIG
+              value: /etc/grafana/grafana.ini
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+
+          resources:
+            requests:
+              cpu:    "100m"
+              memory: "256Mi"
+            limits:
+              cpu:    "500m"
+              memory: "512Mi"
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds:       15
+            timeoutSeconds:      5
+            failureThreshold:    3
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds:       10
+            timeoutSeconds:      3
+            failureThreshold:    3
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem:   true
+            capabilities:
+              drop: ["ALL"]
+
+          volumeMounts:
+            - name: config
+              mountPath: /etc/grafana/grafana.ini
+              subPath:   grafana.ini
+            - name: config
+              mountPath: /etc/grafana/provisioning/datasources/datasources.yaml
+              subPath:   datasources.yaml
+            - name: config
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml
+              subPath:   dashboards.yaml
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: config
+          configMap:
+            name: grafana-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data-pvc
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: ici-observability
+  labels:
+    app.kubernetes.io/name:      grafana
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of:   ici-observability
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+# ── Grafana Ingress (internal admin only) ─────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: ici-observability
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  tls:
+    - hosts:
+        - admin.ici.example.com
+      secretName: ici-admin-tls-cert
+  rules:
+    - host: admin.ici.example.com
+      http:
+        paths:
+          - path: /grafana(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  name: http

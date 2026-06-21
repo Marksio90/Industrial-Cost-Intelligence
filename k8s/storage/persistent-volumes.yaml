@@ -1,0 +1,173 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PersistentVolumeClaims for stateful workloads.
+# StorageClass "gp3" assumes AWS EKS with the EBS CSI driver.
+# Replace with the appropriate StorageClass for your cloud provider:
+#   GKE:    "premium-rwo" / "standard-rwo"
+#   AKS:    "managed-premium" / "managed-csi-premium"
+#   bare-metal: "local-path" (Rancher) or "longhorn"
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── PostgreSQL ────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data-pvc
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of:   ici
+  annotations:
+    # Retain volume on PVC deletion to prevent accidental data loss
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 100Gi
+---
+# ── Redis ─────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data-pvc
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of:   ici
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 10Gi
+---
+# ── Qdrant ────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qdrant-data-pvc
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      qdrant
+    app.kubernetes.io/component: vector-db
+    app.kubernetes.io/part-of:   ici
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 50Gi
+---
+# ── ML Model Cache (HuggingFace / sentence-transformers) ──────────────────────
+# ReadWriteMany so multiple ML pods can share pre-downloaded models.
+# Requires an RWX-capable StorageClass (e.g. EFS on EKS, NFS provisioner).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-models-pvc
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      ici-ml-inference
+    app.kubernetes.io/component: ml
+    app.kubernetes.io/part-of:   ici
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc   # AWS EFS CSI; replace for other clouds
+  resources:
+    requests:
+      storage: 50Gi
+---
+# ── MLflow Artifacts ──────────────────────────────────────────────────────────
+# In production, prefer S3 (set MLFLOW_DEFAULT_ARTIFACT_ROOT=s3://...).
+# This PVC is a fallback for environments without object storage.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-artifacts-pvc
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:      mlflow
+    app.kubernetes.io/component: mlops
+    app.kubernetes.io/part-of:   ici
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 100Gi
+---
+# ── Prometheus TSDB ───────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data-pvc
+  namespace: ici-observability
+  labels:
+    app.kubernetes.io/name:      prometheus
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of:   ici-observability
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 50Gi
+---
+# ── Grafana ───────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data-pvc
+  namespace: ici-observability
+  labels:
+    app.kubernetes.io/name:      grafana
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of:   ici-observability
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 10Gi
+---
+# ── Loki (log chunks) ─────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-data-pvc
+  namespace: ici-observability
+  labels:
+    app.kubernetes.io/name:      loki
+    app.kubernetes.io/component: logging
+    app.kubernetes.io/part-of:   ici-observability
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 100Gi

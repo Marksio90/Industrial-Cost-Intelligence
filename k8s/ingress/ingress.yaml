@@ -1,0 +1,151 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Prerequisites:
+#   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+#   helm install ingress-nginx ingress-nginx/ingress-nginx \
+#     --namespace ingress-nginx --create-namespace \
+#     --set controller.metrics.enabled=true \
+#     --set controller.metrics.serviceMonitor.enabled=true
+#
+#   helm repo add cert-manager https://charts.jetstack.io
+#   helm install cert-manager cert-manager/cert-manager \
+#     --namespace cert-manager --create-namespace \
+#     --set installCRDs=true
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── ClusterIssuer (Let's Encrypt production) ──────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ops@example.com   # <── change me
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+---
+# ── Main application Ingress ──────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ici-ingress
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:    ici-ingress
+    app.kubernetes.io/part-of: ici
+  annotations:
+    kubernetes.io/ingress.class:                    nginx
+    cert-manager.io/cluster-issuer:                 letsencrypt-prod
+
+    # ── Rate limiting ────────────────────────────────────────────────────────
+    nginx.ingress.kubernetes.io/limit-rps:          "60"
+    nginx.ingress.kubernetes.io/limit-connections:  "20"
+
+    # ── Timeouts ─────────────────────────────────────────────────────────────
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-send-timeout:    "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout:    "120"
+
+    # ── Body size ─────────────────────────────────────────────────────────────
+    nginx.ingress.kubernetes.io/proxy-body-size:    "50m"
+
+    # ── Security headers ─────────────────────────────────────────────────────
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Permissions-Policy "geolocation=(), microphone=()" always;
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # ── CORS (if frontend is on separate domain) ──────────────────────────────
+    nginx.ingress.kubernetes.io/enable-cors:        "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin:  "https://app.ici.example.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, X-Request-ID"
+
+    # ── Upstream keepalive ────────────────────────────────────────────────────
+    nginx.ingress.kubernetes.io/upstream-keepalive-connections: "32"
+
+    # ── ModSecurity WAF (optional — enable when controller supports it) ───────
+    # nginx.ingress.kubernetes.io/enable-modsecurity:   "true"
+    # nginx.ingress.kubernetes.io/enable-owasp-core-rules: "true"
+
+spec:
+  tls:
+    - hosts:
+        - api.ici.example.com    # <── change me
+      secretName: ici-tls-cert
+
+  rules:
+    - host: api.ici.example.com  # <── change me
+      http:
+        paths:
+          # ── Public API ──────────────────────────────────────────────────
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: ici-backend
+                port:
+                  name: http
+
+          # ── ML Inference ────────────────────────────────────────────────
+          - path: /ml
+            pathType: Prefix
+            backend:
+              service:
+                name: ici-ml-inference
+                port:
+                  name: http
+
+          # ── RFQ Agent ───────────────────────────────────────────────────
+          - path: /agent
+            pathType: Prefix
+            backend:
+              service:
+                name: ici-rfq-agent
+                port:
+                  name: http
+---
+# ── Internal admin Ingress (MLflow + observability) ───────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ici-admin-ingress
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:    ici-admin-ingress
+    app.kubernetes.io/part-of: ici
+  annotations:
+    kubernetes.io/ingress.class:           nginx
+    cert-manager.io/cluster-issuer:        letsencrypt-prod
+
+    # ── IP allowlist (restrict to VPN/office CIDRs) ──────────────────────────
+    nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+    # ── Basic auth as second factor ──────────────────────────────────────────
+    nginx.ingress.kubernetes.io/auth-type:   basic
+    nginx.ingress.kubernetes.io/auth-secret: ici-admin-htpasswd
+    nginx.ingress.kubernetes.io/auth-realm:  "ICI Admin Area"
+
+spec:
+  tls:
+    - hosts:
+        - admin.ici.example.com  # <── change me
+      secretName: ici-admin-tls-cert
+
+  rules:
+    - host: admin.ici.example.com
+      http:
+        paths:
+          - path: /mlflow
+            pathType: Prefix
+            backend:
+              service:
+                name: mlflow
+                port:
+                  name: http

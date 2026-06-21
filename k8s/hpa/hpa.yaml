@@ -1,0 +1,175 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Prerequisites:
+#   kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+#   # For custom metrics (RPS/queue-depth), install KEDA:
+#   helm repo add kedacore https://kedacore.github.io/charts
+#   helm install keda kedacore/keda --namespace keda --create-namespace
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Backend HPA (CPU + memory) ────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ici-backend-hpa
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:    ici-backend-hpa
+    app.kubernetes.io/part-of: ici
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ici-backend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type:               AverageUtilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type:               AverageUtilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type:          Pods
+          value:         2
+          periodSeconds: 60
+        - type:          Percent
+          value:         50
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300   # be conservative scaling down
+      policies:
+        - type:          Pods
+          value:         1
+          periodSeconds: 120
+      selectPolicy: Min
+---
+# ── Worker HPA (CPU only — queue depth via KEDA ScaledObject below) ───────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ici-worker-hpa
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:    ici-worker-hpa
+    app.kubernetes.io/part-of: ici
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ici-worker
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type:               AverageUtilization
+          averageUtilization: 75
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type:          Pods
+          value:         2
+          periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type:          Pods
+          value:         1
+          periodSeconds: 120
+---
+# ── ML Inference HPA (higher CPU threshold — batch inference is CPU-heavy) ────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ici-ml-inference-hpa
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:    ici-ml-inference-hpa
+    app.kubernetes.io/part-of: ici
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ici-ml-inference
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type:               AverageUtilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type:               AverageUtilization
+          averageUtilization: 85
+  behavior:
+    scaleUp:
+      # Model loading is expensive — don't thrash
+      stabilizationWindowSeconds: 120
+      policies:
+        - type:          Pods
+          value:         1
+          periodSeconds: 120
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - type:          Pods
+          value:         1
+          periodSeconds: 300
+---
+# ── KEDA ScaledObject: Worker scales on Redis queue depth ────────────────────
+# Requires KEDA CRDs installed. Comment out if not using KEDA.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: ici-worker-queue-scaler
+  namespace: ici
+  labels:
+    app.kubernetes.io/name:    ici-worker-queue-scaler
+    app.kubernetes.io/part-of: ici
+spec:
+  scaleTargetRef:
+    name: ici-worker
+  minReplicaCount: 2
+  maxReplicaCount: 8
+  cooldownPeriod: 120
+  pollingInterval: 15
+  triggers:
+    - type: redis
+      metadata:
+        address:     redis-master.ici.svc.cluster.local:6379
+        listName:    arq:queue:default
+        listLength:  "10"   # scale up when >10 jobs waiting per replica
+        databaseIndex: "1"
+      authenticationRef:
+        name: ici-redis-trigger-auth
+---
+# Auth for KEDA Redis trigger
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: ici-redis-trigger-auth
+  namespace: ici
+spec:
+  secretTargetRef:
+    - parameter: password
+      name:      ici-secrets
+      key:       REDIS_PASSWORD
