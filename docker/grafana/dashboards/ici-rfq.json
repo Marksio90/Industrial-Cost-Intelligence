@@ -1,0 +1,186 @@
+{
+  "__inputs": [
+    { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "pluginId": "prometheus" },
+    { "name": "DS_LOKI",       "label": "Loki",       "type": "datasource", "pluginId": "loki" }
+  ],
+  "uid":         "ici-rfq-v1",
+  "title":       "ICI — RFQ Agent",
+  "description": "Success rate, emails, quote scores, LLM usage, compliance",
+  "tags":        ["ici", "rfq", "procurement"],
+  "refresh":     "1m",
+  "time":        { "from": "now-24h", "to": "now" },
+  "timezone":    "browser",
+  "schemaVersion": 38,
+
+  "templating": {
+    "list": [{
+      "name": "tenant_id", "label": "Tenant",
+      "type": "query",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "query": "label_values(ici_rfq_sessions_total, tenant_id)",
+      "multi": true, "includeAll": true
+    }]
+  },
+
+  "panels": [
+
+    {
+      "id": 1, "type": "stat", "title": "RFQ Success Rate",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "avg(ici_rfq_success_rate{tenant_id=~\"$tenant_id\"})", "legendFormat": "success %" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "percentunit",
+        "thresholds": { "steps": [
+          { "value": null, "color": "red" },
+          { "value": 0.50, "color": "yellow" },
+          { "value": 0.80, "color": "green" }
+        ]}
+      }}
+    },
+
+    {
+      "id": 2, "type": "stat", "title": "Sessions (24h)",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum(increase(ici_rfq_sessions_total{tenant_id=~\"$tenant_id\"}[24h]))", "legendFormat": "sessions" }],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+
+    {
+      "id": 3, "type": "stat", "title": "Emails Sent (24h)",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum(increase(ici_rfq_emails_sent_total{tenant_id=~\"$tenant_id\"}[24h]))", "legendFormat": "emails" }],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+
+    {
+      "id": 4, "type": "stat", "title": "Email Failure Rate",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{
+        "expr": "sum(rate(ici_rfq_emails_failed_total{tenant_id=~\"$tenant_id\"}[1h])) / sum(rate(ici_rfq_emails_sent_total{tenant_id=~\"$tenant_id\"}[1h]))",
+        "legendFormat": "failure %"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percentunit",
+        "thresholds": { "steps": [
+          { "value": null, "color": "green" },
+          { "value": 0.05, "color": "yellow" },
+          { "value": 0.20, "color": "red" }
+        ]}
+      }}
+    },
+
+    {
+      "id": 5, "type": "stat", "title": "Avg Median Quote Score",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{
+        "expr": "histogram_quantile(0.50, sum by (le) (rate(ici_rfq_quote_score_bucket{tenant_id=~\"$tenant_id\"}[1h])))",
+        "legendFormat": "P50 score"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+
+    {
+      "id": 6, "type": "stat", "title": "LLM Tokens / hour",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum(rate(ici_rfq_llm_tokens_total[1h])) * 3600", "legendFormat": "tokens/h" }],
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "steps": [
+          { "value": null,   "color": "green" },
+          { "value": 200000, "color": "yellow" },
+          { "value": 500000, "color": "red" }
+        ]}
+      }}
+    },
+
+    {
+      "id": 10, "type": "timeseries", "title": "RFQ Success Rate over Time",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "ici_rfq_success_rate{tenant_id=~\"$tenant_id\"}", "legendFormat": "{{tenant_id}}" },
+        { "expr": "0.80", "legendFormat": "SLO (80%)" },
+        { "expr": "0.70", "legendFormat": "Alert (70%)" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "SLO (80%)" },   "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [5,5], "fill": "dash" } }] },
+          { "matcher": { "id": "byName", "options": "Alert (70%)" }, "properties": [{ "id": "color", "value": { "fixedColor": "red",    "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [5,5], "fill": "dash" } }] }
+        ]
+      }
+    },
+
+    {
+      "id": 11, "type": "timeseries", "title": "Emails Sent vs Failed",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "sum(rate(ici_rfq_emails_sent_total{tenant_id=~\"$tenant_id\"}[10m]))",   "legendFormat": "sent/s" },
+        { "expr": "sum(rate(ici_rfq_emails_failed_total{tenant_id=~\"$tenant_id\"}[10m]))", "legendFormat": "failed/s" },
+        { "expr": "sum(rate(ici_rfq_rate_limit_blocks_total[10m]))",                        "legendFormat": "rate-limited/s" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+
+    {
+      "id": 20, "type": "timeseries", "title": "Session Duration Distribution",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le, status) (rate(ici_rfq_session_duration_seconds_bucket[1h])))", "legendFormat": "P50 {{status}}" },
+        { "expr": "histogram_quantile(0.95, sum by (le, status) (rate(ici_rfq_session_duration_seconds_bucket[1h])))", "legendFormat": "P95 {{status}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+
+    {
+      "id": 21, "type": "timeseries", "title": "LLM Iterations per Session",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le, status) (rate(ici_rfq_llm_iterations_bucket[1h])))", "legendFormat": "P50 {{status}}" },
+        { "expr": "histogram_quantile(0.95, sum by (le, status) (rate(ici_rfq_llm_iterations_bucket[1h])))", "legendFormat": "P95 {{status}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+
+    {
+      "id": 30, "type": "timeseries", "title": "Quote Score Distribution",
+      "description": "Higher score = better quote (price 50% + speed 35% + certs 15%)",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.25, sum by (le) (rate(ici_rfq_quote_score_bucket{tenant_id=~\"$tenant_id\"}[1h])))", "legendFormat": "P25" },
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(ici_rfq_quote_score_bucket{tenant_id=~\"$tenant_id\"}[1h])))", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.75, sum by (le) (rate(ici_rfq_quote_score_bucket{tenant_id=~\"$tenant_id\"}[1h])))", "legendFormat": "P75" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
+    },
+
+    {
+      "id": 31, "type": "timeseries", "title": "LLM Token Usage (input vs output)",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "rate(ici_rfq_llm_tokens_total{type=\"input\"}[10m])",  "legendFormat": "input tokens/s" },
+        { "expr": "rate(ici_rfq_llm_tokens_total{type=\"output\"}[10m])", "legendFormat": "output tokens/s" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+
+    {
+      "id": 40, "type": "logs", "title": "RFQ Agent Logs",
+      "gridPos": { "x": 0, "y": 28, "w": 24, "h": 10 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "targets": [{
+        "expr": "{app=\"ici-rfq-agent\", namespace=\"ici\"} | json | tenant_id=~\"$tenant_id\"",
+        "legendFormat": ""
+      }],
+      "options": { "dedupStrategy": "none", "enableLogDetails": true, "sortOrder": "Descending" }
+    }
+  ]
+}

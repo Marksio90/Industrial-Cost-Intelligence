@@ -1,0 +1,125 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# ICI Platform — Production Overrides
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ═══════════════════════════════════════════════════════════════════════════════
+services:
+
+  backend:
+    build:
+      target: production
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    environment:
+      DEBUG: "false"
+      LOG_JSON: "true"
+      LOG_LEVEL: INFO
+      BACKEND_WORKERS: "4"
+    # No source bind-mounts in prod
+    volumes: []
+
+  worker:
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+    volumes: []
+
+  ml-inference:
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8G     # sentence-transformers need RAM
+        reservations:
+          memory: 2G
+    volumes:
+      - ml_models:/app/.cache/huggingface
+      - mlflow_artifacts:/mlflow/artifacts:ro
+
+  rfq-agent:
+    profiles:
+      - agents
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+
+  postgres:
+    command: >
+      postgres
+      -c max_connections=${POSTGRES_MAX_CONNECTIONS:-200}
+      -c shared_buffers=${POSTGRES_SHARED_BUFFERS:-256MB}
+      -c effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-768MB}
+      -c work_mem=${POSTGRES_WORK_MEM:-16MB}
+      -c maintenance_work_mem=128MB
+      -c wal_level=replica
+      -c max_wal_senders=3
+      -c wal_keep_size=1GB
+      -c checkpoint_completion_target=0.9
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c log_min_duration_statement=1000
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+        reservations:
+          memory: 1G
+    ports: []   # No external port exposure in prod
+
+  redis:
+    ports: []   # No external port exposure in prod
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+
+  qdrant:
+    ports: []   # Internal only
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8G
+
+  mlflow:
+    environment:
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: ${MLFLOW_DEFAULT_ARTIFACT_ROOT:-/mlflow/artifacts}
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+
+  nginx:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+  # Enable all observability in prod
+  prometheus:
+    profiles: []
+
+  grafana:
+    profiles: []
+
+  db-backup:
+    profiles: []   # Always run in prod

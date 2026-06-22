@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "ICI Postgres",
+      "Group": "ICI",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "ici",
+      "Username": "ici",
+      "SSLMode": "prefer",
+      "PassFile": "/pgpassfile"
+    }
+  }
+}

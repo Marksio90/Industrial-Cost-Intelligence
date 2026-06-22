@@ -1,0 +1,251 @@
+{
+  "__inputs": [
+    { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "pluginId": "prometheus" },
+    { "name": "DS_LOKI",       "label": "Loki",       "type": "datasource", "pluginId": "loki" }
+  ],
+  "__requires": [
+    { "type": "grafana",    "id": "grafana",    "version": "10.0.0" },
+    { "type": "datasource", "id": "prometheus", "version": "1.0.0" },
+    { "type": "datasource", "id": "loki",       "version": "1.0.0" },
+    { "type": "panel",      "id": "timeseries", "version": "" },
+    { "type": "panel",      "id": "stat",       "version": "" },
+    { "type": "panel",      "id": "gauge",      "version": "" },
+    { "type": "panel",      "id": "logs",       "version": "" },
+    { "type": "panel",      "id": "table",      "version": "" }
+  ],
+  "uid":         "ici-overview-v1",
+  "title":       "ICI Platform — Overview",
+  "description": "HTTP latency, error rates, worker queue, incidents",
+  "tags":        ["ici", "sre", "overview"],
+  "editable":    true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "refresh":     "30s",
+  "time":        { "from": "now-3h", "to": "now" },
+  "timepicker":  {},
+  "timezone":    "browser",
+  "schemaVersion": 38,
+
+  "templating": {
+    "list": [
+      {
+        "name": "tenant_id", "label": "Tenant",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(ici_http_requests_total, tenant_id)",
+        "multi": true, "includeAll": true, "current": { "text": "All", "value": "$__all" }
+      },
+      {
+        "name": "path", "label": "Route",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(ici_http_request_duration_seconds_bucket, path)",
+        "multi": true, "includeAll": true, "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+
+  "panels": [
+
+    {
+      "id": 1, "type": "stat", "title": "Request Rate",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{
+        "expr": "sum(rate(ici_http_requests_total{tenant_id=~\"$tenant_id\"}[5m]))",
+        "legendFormat": "req/s"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "color": { "mode": "thresholds" },
+        "thresholds": { "steps": [
+          { "value": null,  "color": "green" },
+          { "value": 500,   "color": "yellow" },
+          { "value": 1000,  "color": "red" }
+        ]}
+      }}
+    },
+
+    {
+      "id": 2, "type": "stat", "title": "Error Rate (5xx)",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{
+        "expr": "sum(rate(ici_http_requests_total{status_code=~\"5..\",tenant_id=~\"$tenant_id\"}[5m])) / sum(rate(ici_http_requests_total{tenant_id=~\"$tenant_id\"}[5m]))",
+        "legendFormat": "error %"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "color": { "mode": "thresholds" },
+        "thresholds": { "steps": [
+          { "value": null, "color": "green" },
+          { "value": 0.01, "color": "yellow" },
+          { "value": 0.05, "color": "red" }
+        ]}
+      }}
+    },
+
+    {
+      "id": 3, "type": "stat", "title": "P99 Latency",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum by (le) (rate(ici_http_request_duration_seconds_bucket{tenant_id=~\"$tenant_id\",path=~\"$path\"}[5m])))",
+        "legendFormat": "P99"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "thresholds" },
+        "thresholds": { "steps": [
+          { "value": null, "color": "green" },
+          { "value": 0.5,  "color": "yellow" },
+          { "value": 2.0,  "color": "red" }
+        ]}
+      }}
+    },
+
+    {
+      "id": 4, "type": "stat", "title": "Requests In-Flight",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{
+        "expr": "sum(ici_http_requests_in_flight)",
+        "legendFormat": "in-flight"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "steps": [
+          { "value": null, "color": "green" },
+          { "value": 100,  "color": "yellow" },
+          { "value": 200,  "color": "red" }
+        ]}
+      }}
+    },
+
+    {
+      "id": 5, "type": "stat", "title": "Worker Queue Depth",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "ici_worker_queue_depth{queue=\"default\"}", "legendFormat": "queue" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "steps": [
+          { "value": null, "color": "green" },
+          { "value": 50,   "color": "yellow" },
+          { "value": 200,  "color": "red" }
+        ]}
+      }}
+    },
+
+    {
+      "id": 6, "type": "stat", "title": "Active Incidents",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{
+        "expr": "sum(increase(ici_incidents_total[15m]))",
+        "legendFormat": "incidents/15m"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "steps": [
+          { "value": null, "color": "green" },
+          { "value": 1,    "color": "yellow" },
+          { "value": 5,    "color": "red" }
+        ]}
+      }}
+    },
+
+    {
+      "id": 10, "type": "timeseries", "title": "HTTP Request Rate by Status",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "sum by (status_code) (rate(ici_http_requests_total{tenant_id=~\"$tenant_id\",path=~\"$path\"}[5m]))", "legendFormat": "{{status_code}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "200" }, "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }] },
+          { "matcher": { "id": "byRegexp", "options": "4.." }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }] },
+          { "matcher": { "id": "byRegexp", "options": "5.." }, "properties": [{ "id": "color", "value": { "fixedColor": "#F2495C", "mode": "fixed" } }] }
+        ]
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } }
+    },
+
+    {
+      "id": 11, "type": "timeseries", "title": "Latency Percentiles (P50 / P95 / P99)",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(ici_http_request_duration_seconds_bucket{tenant_id=~\"$tenant_id\",path=~\"$path\"}[5m])))", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(ici_http_request_duration_seconds_bucket{tenant_id=~\"$tenant_id\",path=~\"$path\"}[5m])))", "legendFormat": "P95" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(ici_http_request_duration_seconds_bucket{tenant_id=~\"$tenant_id\",path=~\"$path\"}[5m])))", "legendFormat": "P99" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2 } } },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      }
+    },
+
+    {
+      "id": 20, "type": "timeseries", "title": "Latency Heatmap by Route",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, sum by (le, path) (rate(ici_http_request_duration_seconds_bucket{tenant_id=~\"$tenant_id\",path=~\"$path\"}[5m])))", "legendFormat": "P99 {{path}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] } }
+    },
+
+    {
+      "id": 30, "type": "timeseries", "title": "Worker: Jobs/s by Status",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "sum by (status) (rate(ici_worker_jobs_total[5m]))", "legendFormat": "{{status}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+
+    {
+      "id": 31, "type": "timeseries", "title": "Worker: Job Duration P95 by Type",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le, job_type) (rate(ici_worker_job_duration_seconds_bucket[5m])))", "legendFormat": "P95 {{job_type}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+
+    {
+      "id": 40, "type": "timeseries", "title": "DB Query Duration P95 by Table",
+      "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le, table, operation) (rate(ici_db_query_duration_seconds_bucket[5m])))", "legendFormat": "{{operation}} {{table}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+
+    {
+      "id": 41, "type": "timeseries", "title": "Cache: Hit Rate",
+      "gridPos": { "x": 12, "y": 28, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{
+        "expr": "rate(ici_cache_operations_total{result=\"hit\"}[5m]) / (rate(ici_cache_operations_total{result=\"hit\"}[5m]) + rate(ici_cache_operations_total{result=\"miss\"}[5m]))",
+        "legendFormat": "hit rate"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
+    },
+
+    {
+      "id": 50, "type": "logs", "title": "Recent Error Logs",
+      "gridPos": { "x": 0, "y": 36, "w": 24, "h": 10 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "targets": [{
+        "expr": "{namespace=\"ici\", app=~\"ici-backend|ici-worker\"} | json | level=~\"ERROR|CRITICAL\"",
+        "legendFormat": ""
+      }],
+      "options": { "dedupStrategy": "none", "enableLogDetails": true, "sortOrder": "Descending", "wrapLogMessage": false }
+    }
+  ]
+}

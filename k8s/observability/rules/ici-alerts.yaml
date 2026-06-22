@@ -1,0 +1,468 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# ICI Prometheus Alert Rules
+# Apply: kubectl apply -f k8s/observability/rules/ici-alerts.yaml
+# Or use PrometheusRule CRD (kube-prometheus-stack):
+#   apiVersion: monitoring.coreos.com/v1
+#   kind: PrometheusRule
+# ═══════════════════════════════════════════════════════════════════════════════
+groups:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # HTTP / API
+  # ───────────────────────────────────────────────────────────────────────────
+  - name: ici.http
+    interval: 30s
+    rules:
+
+      - alert: HighErrorRate5xx
+        expr: |
+          sum(rate(ici_http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(ici_http_requests_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "HTTP 5xx error rate > 5%"
+          description: "{{ $value | humanizePercentage }} of requests returning 5xx over the last 5m."
+          runbook:     "https://wiki.ici.internal/runbooks/high-error-rate"
+
+      - alert: CriticalErrorRate5xx
+        expr: |
+          sum(rate(ici_http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(ici_http_requests_total[5m])) > 0.20
+        for: 1m
+        labels:
+          severity: critical
+          team:     sre
+        annotations:
+          summary:     "HTTP 5xx error rate > 20% — possible outage"
+          description: "{{ $value | humanizePercentage }} 5xx rate. Immediate investigation required."
+          runbook:     "https://wiki.ici.internal/runbooks/outage"
+
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (
+              rate(ici_http_request_duration_seconds_bucket[5m])
+            )
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "API P99 latency > 2 seconds"
+          description: "P99 latency is {{ $value | humanizeDuration }} (threshold 2s)."
+          runbook:     "https://wiki.ici.internal/runbooks/high-latency"
+
+      - alert: CriticalLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (
+              rate(ici_http_request_duration_seconds_bucket[5m])
+            )
+          ) > 5.0
+        for: 2m
+        labels:
+          severity: critical
+          team:     sre
+        annotations:
+          summary:     "API P99 latency > 5 seconds — SLO breach imminent"
+          description: "P99 latency {{ $value | humanizeDuration }}. SLO at risk."
+
+      - alert: HighRequestsInFlight
+        expr: sum(ici_http_requests_in_flight) > 200
+        for: 2m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "High number of concurrent requests"
+          description: "{{ $value }} requests in flight. Possible thundering-herd or slow upstream."
+
+      - alert: BackendPodDown
+        expr: |
+          kube_deployment_status_replicas_available{
+            namespace="ici",
+            deployment="ici-backend"
+          } < 1
+        for: 1m
+        labels:
+          severity: critical
+          team:     sre
+        annotations:
+          summary:     "ICI Backend has 0 available replicas"
+          description: "All backend pods are down. Service is unavailable."
+
+      - alert: BackendReplicasMissing
+        expr: |
+          kube_deployment_status_replicas_available{namespace="ici",deployment="ici-backend"}
+          <
+          kube_deployment_spec_replicas{namespace="ici",deployment="ici-backend"}
+        for: 5m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "Backend running with fewer replicas than desired"
+          description: >
+            {{ $value }} replicas available, desired
+            {{ with query "kube_deployment_spec_replicas{namespace='ici',deployment='ici-backend'}" }}
+              {{ . | first | value }}
+            {{ end }}.
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # ML Cost Prediction
+  # ───────────────────────────────────────────────────────────────────────────
+  - name: ici.ml
+    interval: 60s
+    rules:
+
+      - alert: MLMAPEWarning
+        expr: ici_ml_mape_ewma > 0.20
+        for: 5m
+        labels:
+          severity: warning
+          team:     ml
+        annotations:
+          summary:     "ML cost prediction MAPE EWMA > 20%"
+          description: "EWMA MAPE = {{ $value | humanizePercentage }}. Model accuracy degrading."
+          runbook:     "https://wiki.ici.internal/runbooks/ml-mape-high"
+
+      - alert: MLMAPECritical
+        expr: ici_ml_mape_ewma > 0.35
+        for: 2m
+        labels:
+          severity: critical
+          team:     ml
+        annotations:
+          summary:     "ML cost prediction MAPE > 35% — retraining required"
+          description: "MAPE EWMA={{ $value | humanizePercentage }}. Trigger retraining immediately."
+
+      - alert: MLDriftModerate
+        expr: ici_ml_drift_psi > 0.10
+        for: 0m
+        labels:
+          severity: warning
+          team:     ml
+        annotations:
+          summary:     "ML feature drift detected (PSI moderate)"
+          description: >
+            Feature {{ $labels.feature }} PSI={{ $value | humanize }}.
+            Moderate drift — monitor and schedule retraining.
+
+      - alert: MLDriftHigh
+        expr: ici_ml_drift_psi > 0.20
+        for: 0m
+        labels:
+          severity: critical
+          team:     ml
+        annotations:
+          summary:     "ML feature drift HIGH (PSI > 0.20) — immediate retraining"
+          description: >
+            Feature {{ $labels.feature }} PSI={{ $value | humanize }}.
+            High drift detected. Auto-retrain should trigger.
+
+      - alert: MLInferencePodDown
+        expr: |
+          kube_deployment_status_replicas_available{
+            namespace="ici", deployment="ici-ml-inference"
+          } < 1
+        for: 2m
+        labels:
+          severity: critical
+          team:     ml
+        annotations:
+          summary:     "ML Inference service has no available replicas"
+
+      - alert: MLHighPredictionLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (
+              rate(ici_ml_prediction_duration_seconds_bucket[5m])
+            )
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          team:     ml
+        annotations:
+          summary:     "ML prediction P95 latency > 1 second"
+          description: "P95={{ $value | humanizeDuration }}. Model serving may be overloaded."
+
+      - alert: MLCacheHitRateLow
+        expr: |
+          rate(ici_ml_cache_hits_total[10m])
+          /
+          (rate(ici_ml_cache_hits_total[10m]) + rate(ici_ml_cache_misses_total[10m]))
+          < 0.20
+        for: 10m
+        labels:
+          severity: info
+          team:     ml
+        annotations:
+          summary:     "ML prediction cache hit rate < 20%"
+          description: "Cache efficiency low: {{ $value | humanizePercentage }}. Consider wider TTL."
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # RFQ Agent
+  # ───────────────────────────────────────────────────────────────────────────
+  - name: ici.rfq
+    interval: 60s
+    rules:
+
+      - alert: RFQSuccessRateLow
+        expr: ici_rfq_success_rate < 0.70
+        for: 5m
+        labels:
+          severity: warning
+          team:     procurement
+        annotations:
+          summary:     "RFQ agent success rate < 70%"
+          description: >
+            Tenant {{ $labels.tenant_id }} RFQ success rate =
+            {{ $value | humanizePercentage }}. Investigate agent failures.
+          runbook:     "https://wiki.ici.internal/runbooks/rfq-success-rate"
+
+      - alert: RFQSuccessRateCritical
+        expr: ici_rfq_success_rate < 0.50
+        for: 2m
+        labels:
+          severity: critical
+          team:     procurement
+        annotations:
+          summary:     "RFQ success rate below 50%"
+
+      - alert: RFQEmailFailureSpike
+        expr: rate(ici_rfq_emails_failed_total[10m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team:     procurement
+        annotations:
+          summary:     "RFQ email failure rate elevated"
+          description: "{{ $value | humanize }} failures/s. Reason: {{ $labels.reason }}"
+
+      - alert: RFQRateLimitFrequent
+        expr: rate(ici_rfq_rate_limit_blocks_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: info
+          team:     procurement
+        annotations:
+          summary:     "RFQ rate limiter blocking frequently (>1/s)"
+          description: "Limiter {{ $labels.limiter }} blocking. Consider increasing limits."
+
+      - alert: RFQLLMTokenBudgetHigh
+        expr: |
+          increase(ici_rfq_llm_tokens_total{type="input"}[1h]) > 500000
+        for: 0m
+        labels:
+          severity: warning
+          team:     ml
+        annotations:
+          summary:     "RFQ agent consumed >500k LLM input tokens in 1h"
+          description: "{{ $value | humanize }} tokens. Cost management review needed."
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Worker / Queue
+  # ───────────────────────────────────────────────────────────────────────────
+  - name: ici.worker
+    interval: 30s
+    rules:
+
+      - alert: WorkerQueueBacklog
+        expr: ici_worker_queue_depth{queue="default"} > 100
+        for: 5m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "Worker queue depth > 100 jobs"
+          description: "{{ $value }} jobs waiting. Worker may be undersized or stuck."
+
+      - alert: WorkerQueueCritical
+        expr: ici_worker_queue_depth{queue="default"} > 500
+        for: 2m
+        labels:
+          severity: critical
+          team:     sre
+        annotations:
+          summary:     "Worker queue depth > 500 — severe backlog"
+
+      - alert: WorkerHighJobFailureRate
+        expr: |
+          rate(ici_worker_jobs_total{status="failed"}[10m])
+          /
+          rate(ici_worker_jobs_total[10m]) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "Worker job failure rate > 10%"
+          description: "{{ $value | humanizePercentage }} jobs failing. Type: {{ $labels.job_type }}"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Infrastructure
+  # ───────────────────────────────────────────────────────────────────────────
+  - name: ici.infra
+    interval: 30s
+    rules:
+
+      - alert: PostgresConnectionPoolExhausted
+        expr: ici_db_pool_overflow_total > 0
+        for: 1m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "PostgreSQL connection pool overflow detected"
+          description: "Pool overflow {{ $value }} times. Increase pool size or reduce concurrency."
+
+      - alert: HighDBQueryLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, operation, table) (
+              rate(ici_db_query_duration_seconds_bucket[5m])
+            )
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "DB P95 query latency > 500ms"
+          description: >
+            Operation={{ $labels.operation }}, table={{ $labels.table }},
+            latency={{ $value | humanizeDuration }}.
+
+      - alert: RedisHighLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (rate(ici_cache_operation_duration_seconds_bucket[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "Redis P99 latency > 50ms"
+
+      - alert: PVCNearFull
+        expr: |
+          (kubelet_volume_stats_used_bytes{namespace=~"ici.*"} /
+           kubelet_volume_stats_capacity_bytes{namespace=~"ici.*"}) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "PVC {{ $labels.persistentvolumeclaim }} > 85% full"
+          description: "{{ $value | humanizePercentage }} used. Expand or clean up."
+
+      - alert: PVCCriticalFull
+        expr: |
+          (kubelet_volume_stats_used_bytes{namespace=~"ici.*"} /
+           kubelet_volume_stats_capacity_bytes{namespace=~"ici.*"}) > 0.95
+        for: 1m
+        labels:
+          severity: critical
+          team:     sre
+        annotations:
+          summary:     "PVC {{ $labels.persistentvolumeclaim }} > 95% — imminent disk full"
+
+      - alert: NodeHighCPU
+        expr: |
+          100 - (avg by (node) (
+            rate(node_cpu_seconds_total{mode="idle"}[5m])
+          ) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "Node CPU > 85% for 10 minutes"
+          description: "Node {{ $labels.node }} CPU={{ $value | humanize }}%"
+
+      - alert: NodeHighMemory
+        expr: |
+          (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          team:     sre
+        annotations:
+          summary:     "Node memory usage > 90%"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # SLO burn-rate (multi-window)
+  # ───────────────────────────────────────────────────────────────────────────
+  - name: ici.slo
+    interval: 60s
+    rules:
+
+      # Error budget: 99.5% availability → 0.5% error budget
+      # Fast burn: consuming 14.4× in 1h (burns 1h of monthly budget in 5m)
+      - alert: SLOErrorBudgetFastBurn
+        expr: |
+          (
+            sum(rate(ici_http_requests_total{status_code=~"5.."}[1h]))
+            / sum(rate(ici_http_requests_total[1h]))
+          ) > (14.4 * 0.005)
+          and
+          (
+            sum(rate(ici_http_requests_total{status_code=~"5.."}[5m]))
+            / sum(rate(ici_http_requests_total[5m]))
+          ) > (14.4 * 0.005)
+        for: 0m
+        labels:
+          severity: critical
+          team:     sre
+        annotations:
+          summary:     "SLO error budget fast-burn alert (14.4× rate)"
+          description: >
+            Burning error budget 14.4× faster than allowed.
+            At this rate the monthly budget will be exhausted in < 1 hour.
+
+      # Slow burn: 3× over 6h
+      - alert: SLOErrorBudgetSlowBurn
+        expr: |
+          (
+            sum(rate(ici_http_requests_total{status_code=~"5.."}[6h]))
+            / sum(rate(ici_http_requests_total[6h]))
+          ) > (3 * 0.005)
+          and
+          (
+            sum(rate(ici_http_requests_total{status_code=~"5.."}[30m]))
+            / sum(rate(ici_http_requests_total[30m]))
+          ) > (3 * 0.005)
+        for: 0m
+        labels:
+          severity: warning
+          team:     sre
+        annotations:
+          summary:     "SLO error budget slow-burn alert (3× rate over 6h)"
+          description: >
+            Burning error budget 3× faster than allowed over 6h.
+            Monthly budget may be exhausted if trend continues.
+
+      # Latency SLO: 95% of requests < 500ms
+      - alert: SLOLatencyBudgetBurn
+        expr: |
+          1 - (
+            sum(rate(ici_http_request_duration_seconds_bucket{le="0.5"}[1h]))
+            / sum(rate(ici_http_request_duration_seconds_count[1h]))
+          ) > (14.4 * 0.05)
+        for: 0m
+        labels:
+          severity: critical
+          team:     sre
+        annotations:
+          summary:     "Latency SLO error budget fast burn"
+          description: >
+            More than {{ $value | humanizePercentage }} of requests are exceeding
+            the 500ms latency SLO, burning error budget 14.4× faster than allowed.

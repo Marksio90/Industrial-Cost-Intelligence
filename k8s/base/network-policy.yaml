@@ -1,0 +1,187 @@
+# ── Default deny-all for ici namespace ───────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: ici
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# ── Allow DNS egress for all pods ─────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: ici
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# ── Backend: ingress from ingress-nginx + egress to postgres/redis/qdrant ─────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ici-backend-policy
+  namespace: ici
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ici-backend
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8000
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: promtail
+          namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ici-observability
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports: [{ port: 5432 }]
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports: [{ port: 6379 }]
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qdrant
+      ports: [{ port: 6333 }, { port: 6334 }]
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mlflow
+      ports: [{ port: 5000 }]
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ici-ml-inference
+      ports: [{ port: 8002 }]
+    # OTEL collector
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ici-observability
+      ports: [{ port: 4317 }, { port: 4318 }]
+    # External HTTPS (Anthropic API, etc.)
+    - ports:
+        - port: 443
+          protocol: TCP
+---
+# ── Worker: egress to redis/postgres, no public ingress ──────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ici-worker-policy
+  namespace: ici
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ici-worker
+  policyTypes: [Ingress, Egress]
+  ingress: []   # No inbound traffic — workers pull from queue
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports: [{ port: 6379 }]
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports: [{ port: 5432 }]
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ici-ml-inference
+      ports: [{ port: 8002 }]
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ici-observability
+      ports: [{ port: 4317 }, { port: 4318 }]
+    - ports:
+        - port: 443
+          protocol: TCP
+---
+# ── ML Inference: ingress from backend/worker only ────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ici-ml-inference-policy
+  namespace: ici
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ici-ml-inference
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ici-backend
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ici-worker
+      ports: [{ port: 8002 }]
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports: [{ port: 8002 }]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports: [{ port: 5432 }]
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports: [{ port: 6379 }]
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mlflow
+      ports: [{ port: 5000 }]
+    - ports:
+        - port: 443
+          protocol: TCP
+---
+# ── Prometheus: scrape all pods in ici namespace ──────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: ici
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ici-observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus

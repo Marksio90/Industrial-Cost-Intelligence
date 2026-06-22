@@ -1,0 +1,58 @@
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.eggs/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.log
+
+# ── Node (future frontend) ────────────────────────────────────────────────────
+node_modules/
+.npm/
+dist/
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── DB backups ────────────────────────────────────────────────────────────────
+backups/*.sql.gz
+backups/*.dump
+
+# ── ML artefacts ─────────────────────────────────────────────────────────────
+*.pkl
+*.joblib
+*.parquet
+ml/.cache/
+ml/mlruns/
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Kubernetes secrets (never commit real secrets) ───────────────────────────
+k8s/secrets/*.yaml
+!k8s/secrets/secrets-template.yaml
