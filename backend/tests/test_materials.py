@@ -1,7 +1,7 @@
 from __future__ import annotations
 from decimal import Decimal
 import pytest
-from src.modules.materials.domain.models import Material, MaterialClass, MaterialNumber, MaterialStatus
+from src.modules.materials.domain.models import Material, MaterialClass, MaterialNumber, MaterialStatus, UnitOfMeasure
 
 
 class TestMaterialNumber:
@@ -29,8 +29,8 @@ class TestMaterialDomain:
             name="Steel Sheet",
             description="Cold rolled",
             material_class=MaterialClass.STEEL,
-            base_unit="KG",
-            price_eur=Decimal("5.50"),
+            unit_of_measure=UnitOfMeasure.KG,
+            base_price_eur=Decimal("5.50"),
             tenant_id="t1",
             lead_time_days=14,
             min_order_qty=Decimal("100"),
@@ -92,9 +92,9 @@ class TestMaterialAPI:
         resp = await client.post("/api/v1/materials", json={
             "material_number": "MAT-API-001",
             "name": "Test Material",
-            "material_class": "METAL",
-            "base_unit": "KG",
-            "price_eur": "10.00",
+            "material_class": "STEEL",
+            "unit_of_measure": "KG",
+            "base_price_eur": "10.00",
         })
         assert resp.status_code == 201
         data = resp.json()
@@ -103,7 +103,7 @@ class TestMaterialAPI:
 
     @pytest.mark.asyncio
     async def test_create_duplicate_raises_409(self, client):
-        payload = {"material_number": "MAT-DUP-001", "name": "Dup", "material_class": "METAL", "base_unit": "KG", "price_eur": "1.00"}
+        payload = {"material_number": "MAT-DUP-001", "name": "Dup", "material_class": "STEEL", "unit_of_measure": "KG", "base_price_eur": "1.00"}
         await client.post("/api/v1/materials", json=payload)
         resp = await client.post("/api/v1/materials", json=payload)
         assert resp.status_code == 409

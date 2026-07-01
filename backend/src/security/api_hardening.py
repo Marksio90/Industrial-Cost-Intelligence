@@ -77,7 +77,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         response: Response = await call_next(request)
         for h in _HEADERS_TO_REMOVE:
-            response.headers.pop(h, None)
+            if h in response.headers:
+                del response.headers[h]
         for k, v in _SECURITY_HEADERS.items():
             response.headers[k] = v
         return response
