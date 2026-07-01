@@ -25,12 +25,18 @@ NAMING_CONVENTION: dict[str, str] = {
 
 metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
+_engine_kwargs = {}
+if settings.database_url.startswith("postgresql"):
+    _engine_kwargs = {
+        "pool_size": settings.db_pool_size,
+        "max_overflow": settings.db_max_overflow,
+        "pool_pre_ping": True,
+    }
+
 engine = create_async_engine(
     settings.database_url,
-    pool_size=settings.db_pool_size,
-    max_overflow=settings.db_max_overflow,
     echo=settings.db_echo,
-    pool_pre_ping=True,
+    **_engine_kwargs,
 )
 
 AsyncSessionFactory = async_sessionmaker(
