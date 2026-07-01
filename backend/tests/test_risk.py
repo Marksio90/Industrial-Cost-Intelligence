@@ -85,7 +85,7 @@ class TestRiskItem:
 class TestRiskAPI:
     @pytest.mark.asyncio
     async def test_create_risk(self, client):
-        resp = await client.post("/api/v1/risks", json={
+        resp = await client.post("/api/v1/risk", json={
             "category": "SUPPLY",
             "title": "Test supply risk",
             "probability": "0.5",
@@ -99,7 +99,7 @@ class TestRiskAPI:
 
     @pytest.mark.asyncio
     async def test_portfolio(self, client):
-        resp = await client.get("/api/v1/risks/portfolio")
+        resp = await client.get("/api/v1/risk/portfolio")
         assert resp.status_code == 200
         data = resp.json()
         assert "open_count" in data
