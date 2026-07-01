@@ -64,9 +64,13 @@ COPY backend/pyproject.toml backend/README.md* ./
 RUN uv venv /app/.venv && \
     uv pip install --python /app/.venv ".[dev]"
 
+# Install agents dependencies (for rfq-agent support)
+COPY agents/pyproject.toml /tmp/agents/
+RUN cd /tmp/agents && \
+    uv pip install --python /app/.venv "." 2>/dev/null || true
+
 # Install Playwright browsers for rfq-agent support
-COPY agents/pyproject.toml /tmp/agents_pyproject.toml
-RUN uv pip install --python /app/.venv "$(grep -o 'playwright[^\"]*' /tmp/agents_pyproject.toml | head -1 || echo 'playwright>=1.45.0')" && \
+RUN uv pip install --python /app/.venv "playwright>=1.45.0" && \
     /app/.venv/bin/playwright install chromium --with-deps 2>/dev/null || true
 
 # ── Stage 3: development ──────────────────────────────────────────────────────

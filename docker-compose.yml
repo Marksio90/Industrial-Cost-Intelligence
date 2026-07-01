@@ -444,6 +444,25 @@ services:
   # │  INGRESS                                                              │
   # └──────────────────────────────────────────────────────────────────────┘
 
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    <<: *restart-policy
+    container_name: ici_frontend
+    hostname: frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    networks:
+      - ici_public
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ || exit 1"]
+      <<: *hc-defaults
+    logging: *default-logging
+    labels:
+      com.ici.service: "frontend"
+      com.ici.tier: "public"
+
   nginx:
     build:
       context: .
