@@ -8,7 +8,7 @@ from src.database import Base, get_db
 from src.main import create_app
 from src.middleware.auth import CurrentUser, create_access_token, get_current_user
 
-TEST_DB_URL = "postgresql+asyncpg://ici:ici@localhost:5432/ici_test"
+TEST_DB_URL = "sqlite+aiosqlite:///./ici_test.db"
 
 engine = create_async_engine(TEST_DB_URL, echo=False)
 TestSessionFactory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -24,7 +24,8 @@ def event_loop():
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_db():
     async with engine.begin() as conn:
-        await conn.execute(__import__("sqlalchemy").text("CREATE SCHEMA IF NOT EXISTS ici"))
+        if TEST_DB_URL.startswith("postgresql"):
+            await conn.execute(__import__("sqlalchemy").text("CREATE SCHEMA IF NOT EXISTS ici"))
         await conn.run_sync(Base.metadata.create_all)
     yield
     async with engine.begin() as conn:
