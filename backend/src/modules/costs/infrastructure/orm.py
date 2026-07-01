@@ -18,7 +18,6 @@ class CostBreakdownORM(Base):
     __table_args__ = (
         Index("ix_cb_tenant_ref", "tenant_id", "reference_number"),
         Index("ix_cb_tenant_bom",  "tenant_id", "bom_item_id"),
-        {"schema": "ici"},
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -44,12 +43,12 @@ class CostBreakdownORM(Base):
 
 class CostComponentORM(Base):
     __tablename__ = "cost_components"
-    __table_args__ = ({"schema": "ici"},)
+    __table_args__ = ()
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     breakdown_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("ici.cost_breakdowns.id", ondelete="CASCADE"),
+        ForeignKey("cost_breakdowns.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

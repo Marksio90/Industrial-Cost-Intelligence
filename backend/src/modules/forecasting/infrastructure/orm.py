@@ -10,7 +10,7 @@ from ....database import Base
 
 class PriceForecastORM(Base):
     __tablename__ = "price_forecasts"
-    __table_args__ = ({"schema": "ici"},)
+    __table_args__ = ()
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     material_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
@@ -31,7 +31,7 @@ class PriceForecastORM(Base):
 
 class DemandForecastORM(Base):
     __tablename__ = "demand_forecasts"
-    __table_args__ = ({"schema": "ici"},)
+    __table_args__ = ()
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     material_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
@@ -52,10 +52,10 @@ class DemandForecastORM(Base):
 
 class ForecastDataPointORM(Base):
     __tablename__ = "forecast_data_points"
-    __table_args__ = ({"schema": "ici"},)
+    __table_args__ = ()
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    price_forecast_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("ici.price_forecasts.id", ondelete="CASCADE"), nullable=True, index=True)
-    demand_forecast_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("ici.demand_forecasts.id", ondelete="CASCADE"), nullable=True, index=True)
+    price_forecast_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("price_forecasts.id", ondelete="CASCADE"), nullable=True, index=True)
+    demand_forecast_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("demand_forecasts.id", ondelete="CASCADE"), nullable=True, index=True)
     period_date: Mapped[date] = mapped_column(Date, nullable=False)
     value: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     point_type: Mapped[str] = mapped_column(String(12), nullable=False)

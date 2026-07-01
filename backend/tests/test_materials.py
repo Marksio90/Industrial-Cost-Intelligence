@@ -28,7 +28,7 @@ class TestMaterialDomain:
             material_number="MAT-001",
             name="Steel Sheet",
             description="Cold rolled",
-            material_class=MaterialClass.METAL,
+            material_class=MaterialClass.STEEL,
             base_unit="KG",
             price_eur=Decimal("5.50"),
             tenant_id="t1",

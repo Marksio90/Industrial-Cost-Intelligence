@@ -14,7 +14,6 @@ class SupplierORM(Base):
     __tablename__ = "suppliers"
     __table_args__ = (
         Index("ix_suppliers_tenant_code", "tenant_id", "code", unique=True),
-        {"schema": "ici"},
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)

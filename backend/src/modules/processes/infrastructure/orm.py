@@ -11,7 +11,6 @@ class ProcessORM(Base):
     __tablename__ = "processes"
     __table_args__ = (
         Index("ix_processes_tenant_code", "tenant_id", "code", unique=True),
-        {"schema": "ici"},
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)

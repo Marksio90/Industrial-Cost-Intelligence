@@ -10,7 +10,7 @@ from ....database import Base
 
 class RiskItemORM(Base):
     __tablename__ = "risk_items"
-    __table_args__ = ({"schema": "ici"},)
+    __table_args__ = ()
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     category: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
@@ -36,9 +36,9 @@ class RiskItemORM(Base):
 
 class MitigationActionORM(Base):
     __tablename__ = "mitigation_actions"
-    __table_args__ = ({"schema": "ici"},)
+    __table_args__ = ()
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    risk_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("ici.risk_items.id", ondelete="CASCADE"), nullable=False, index=True)
+    risk_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("risk_items.id", ondelete="CASCADE"), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     owner: Mapped[str] = mapped_column(String(128), nullable=False)
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

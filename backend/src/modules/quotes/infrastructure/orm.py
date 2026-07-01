@@ -10,7 +10,7 @@ from ....database import Base
 
 class QuoteORM(Base):
     __tablename__ = "quotes"
-    __table_args__ = ({"schema": "ici"},)
+    __table_args__ = ()
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     rfq_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
@@ -31,9 +31,9 @@ class QuoteORM(Base):
 
 class QuoteLineItemORM(Base):
     __tablename__ = "quote_line_items"
-    __table_args__ = ({"schema": "ici"},)
+    __table_args__ = ()
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    quote_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("ici.quotes.id", ondelete="CASCADE"), nullable=False, index=True)
+    quote_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("quotes.id", ondelete="CASCADE"), nullable=False, index=True)
     material_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     description: Mapped[str] = mapped_column(String(512), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)

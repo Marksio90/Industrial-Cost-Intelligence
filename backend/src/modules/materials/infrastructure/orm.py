@@ -20,7 +20,6 @@ class MaterialORM(Base):
         Index("ix_materials_tenant_number", "tenant_id", "material_number", unique=True),
         Index("ix_materials_tenant_class",  "tenant_id", "material_class"),
         Index("ix_materials_tenant_status", "tenant_id", "status"),
-        {"schema": "ici"},
     )
 
     id: Mapped[UUID] = mapped_column(
