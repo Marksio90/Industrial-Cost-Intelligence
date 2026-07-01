@@ -25,7 +25,10 @@ async def create(body: CreateRFQRequest, svc: RFQService = Depends(get_service),
     )))
 
 @router.get("", response_model=RFQListResponse)
-async def list_rfqs(status: RFQStatus | None = Query(default=None), pg: PaginationDep = Depends(), svc: RFQService = Depends(get_service), user: CurrentUser = Depends(get_current_user)) -> RFQListResponse:
+async def list_rfqs(
+    status: RFQStatus | None = Query(default=None),
+    *,
+    pg: PaginationDep, svc: RFQService = Depends(get_service), user: CurrentUser = Depends(get_current_user)) -> RFQListResponse:
     items, total = await svc.list(user.tenant_id, status, pg.offset, pg.limit)
     return RFQListResponse(total=total, page=pg.page, page_size=pg.page_size, items=[RFQResponse.from_domain(r) for r in items])
 

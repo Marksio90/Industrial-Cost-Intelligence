@@ -26,7 +26,10 @@ async def create(body: CreateProcessRequest, svc: ProcessService = Depends(get_s
     )))
 
 @router.get("", response_model=ProcessListResponse)
-async def list_processes(process_type: ProcessType | None = Query(default=None), pg: PaginationDep = Depends(), svc: ProcessService = Depends(get_service), user: CurrentUser = Depends(get_current_user)) -> ProcessListResponse:
+async def list_processes(
+    process_type: ProcessType | None = Query(default=None),
+    *,
+    pg: PaginationDep, svc: ProcessService = Depends(get_service), user: CurrentUser = Depends(get_current_user)) -> ProcessListResponse:
     items, total = await svc.list(user.tenant_id, process_type, pg.offset, pg.limit)
     return ProcessListResponse(total=total, page=pg.page, page_size=pg.page_size, items=[ProcessResponse.from_domain(p) for p in items])
 

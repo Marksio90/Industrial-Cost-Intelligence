@@ -20,7 +20,13 @@ async def create_price_forecast(body: CreateForecastRequest, svc: ForecastingSer
     return ForecastResponse.from_domain(f)
 
 @router.get("/price", response_model=ForecastListResponse)
-async def list_price_forecasts(material_id: UUID | None = Query(default=None), pg: PaginationDep = Depends(), svc: ForecastingService = Depends(get_service), user: CurrentUser = Depends(get_current_user)) -> ForecastListResponse:
+async def list_price_forecasts(
+    material_id: UUID | None = Query(default=None),
+    *,
+    pg: PaginationDep,
+    svc: ForecastingService = Depends(get_service),
+    user: CurrentUser = Depends(get_current_user),
+) -> ForecastListResponse:
     items, total = await svc.list_price_forecasts(user.tenant_id, material_id, pg.offset, pg.limit)
     return ForecastListResponse(total=total, page=pg.page, page_size=pg.page_size, items=[ForecastResponse.from_domain(f) for f in items])
 
@@ -39,7 +45,13 @@ async def create_demand_forecast(body: CreateForecastRequest, svc: ForecastingSe
     return ForecastResponse.from_domain(f)
 
 @router.get("/demand", response_model=ForecastListResponse)
-async def list_demand_forecasts(material_id: UUID | None = Query(default=None), pg: PaginationDep = Depends(), svc: ForecastingService = Depends(get_service), user: CurrentUser = Depends(get_current_user)) -> ForecastListResponse:
+async def list_demand_forecasts(
+    material_id: UUID | None = Query(default=None),
+    *,
+    pg: PaginationDep,
+    svc: ForecastingService = Depends(get_service),
+    user: CurrentUser = Depends(get_current_user),
+) -> ForecastListResponse:
     items, total = await svc.list_demand_forecasts(user.tenant_id, material_id, pg.offset, pg.limit)
     return ForecastListResponse(total=total, page=pg.page, page_size=pg.page_size, items=[ForecastResponse.from_domain(f) for f in items])
 

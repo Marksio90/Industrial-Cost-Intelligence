@@ -62,7 +62,8 @@ async def list_materials(
     material_class: MaterialClass | None = Query(default=None),
     status: MaterialStatus | None = Query(default=None),
     search: str | None = Query(default=None, max_length=128),
-    pagination: PaginationDep = Depends(),
+    *,
+    pagination: PaginationDep,
     service: MaterialService = Depends(get_service),
     user: CurrentUser = Depends(get_current_user),
 ) -> MaterialListResponse:

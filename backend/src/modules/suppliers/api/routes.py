@@ -45,7 +45,8 @@ async def create_supplier(
 async def list_suppliers(
     status: SupplierStatus | None = Query(default=None),
     search: str | None = Query(default=None),
-    pg: PaginationDep = Depends(),
+    *,
+    pg: PaginationDep,
     svc: SupplierService = Depends(get_service),
     user: CurrentUser = Depends(get_current_user),
 ) -> SupplierListResponse:

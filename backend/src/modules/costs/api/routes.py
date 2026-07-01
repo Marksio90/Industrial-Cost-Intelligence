@@ -46,7 +46,8 @@ async def create_breakdown(
 async def list_breakdowns(
     bom_item_id: UUID | None = Query(default=None),
     status: CostStatus | None = Query(default=None),
-    pg: PaginationDep = Depends(),
+    *,
+    pg: PaginationDep,
     svc: CostService = Depends(get_service),
     user: CurrentUser = Depends(get_current_user),
 ) -> CostListResponse:

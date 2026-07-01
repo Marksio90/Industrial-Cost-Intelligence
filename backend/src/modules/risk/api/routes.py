@@ -24,7 +24,12 @@ async def create(body: CreateRiskRequest, svc: RiskService = Depends(get_service
     return RiskResponse.from_domain(r)
 
 @router.get("", response_model=RiskListResponse)
-async def list_risks(category: RiskCategory | None = Query(default=None), status: RiskStatus | None = Query(default=None), severity: RiskSeverity | None = Query(default=None), pg: PaginationDep = Depends(), svc: RiskService = Depends(get_service), user: CurrentUser = Depends(get_current_user)) -> RiskListResponse:
+async def list_risks(
+    category: RiskCategory | None = Query(default=None),
+    status: RiskStatus | None = Query(default=None),
+    severity: RiskSeverity | None = Query(default=None),
+    *,
+    pg: PaginationDep, svc: RiskService = Depends(get_service), user: CurrentUser = Depends(get_current_user)) -> RiskListResponse:
     items, total = await svc.list(user.tenant_id, category, status, severity, pg.offset, pg.limit)
     return RiskListResponse(total=total, page=pg.page, page_size=pg.page_size, items=[RiskResponse.from_domain(r) for r in items])
 

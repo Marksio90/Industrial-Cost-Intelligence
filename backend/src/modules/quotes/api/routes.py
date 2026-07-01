@@ -25,7 +25,12 @@ async def create(body: CreateQuoteRequest, svc: QuoteService = Depends(get_servi
     )))
 
 @router.get("", response_model=QuoteListResponse)
-async def list_quotes(rfq_id: UUID | None = Query(default=None), supplier_id: UUID | None = Query(default=None), status: QuoteStatus | None = Query(default=None), pg: PaginationDep = Depends(), svc: QuoteService = Depends(get_service), user: CurrentUser = Depends(get_current_user)) -> QuoteListResponse:
+async def list_quotes(
+    rfq_id: UUID | None = Query(default=None),
+    supplier_id: UUID | None = Query(default=None),
+    status: QuoteStatus | None = Query(default=None),
+    *,
+    pg: PaginationDep, svc: QuoteService = Depends(get_service), user: CurrentUser = Depends(get_current_user)) -> QuoteListResponse:
     items, total = await svc.list(user.tenant_id, rfq_id, supplier_id, status, pg.offset, pg.limit)
     return QuoteListResponse(total=total, page=pg.page, page_size=pg.page_size, items=[QuoteResponse.from_domain(q) for q in items])
 
