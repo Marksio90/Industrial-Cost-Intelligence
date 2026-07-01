@@ -28,7 +28,7 @@ dependencies = [
     # Search / vector
     "sentence-transformers>=3.0.0",
     "numpy>=1.26.0",
-    "redis[asyncio]>=5.0.0",
+    "redis>=5.0.0",
     "pgvector>=0.3.0",
     "qdrant-client>=1.9.0",
 ]
