@@ -124,7 +124,7 @@ services:
   # └──────────────────────────────────────────────────────────────────────┘
 
   postgres:
-    image: pgvector/pgvector:pg16
+    image: postgres:16-alpine
     <<: *restart-policy
     container_name: ici_postgres
     hostname: postgres
