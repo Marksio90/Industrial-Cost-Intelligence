@@ -80,7 +80,7 @@ class DiscoveredSupplierORM(Base):
     website: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
     capabilities: Mapped[list[str]] = mapped_column(JSONB, default=list)
-    metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    meta_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     source: Mapped[str] = mapped_column(String(64), default="scraper")
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
     blacklisted: Mapped[bool] = mapped_column(Boolean, default=False)
