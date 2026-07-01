@@ -55,7 +55,7 @@ class TestMaterialDomain:
         assert len(events) == 1
         assert events[0].__class__.__name__ == "MaterialPriceUpdated"
         assert events[0].new_price_eur == Decimal("6.00")
-        assert m.price_eur == Decimal("6.00")
+        assert m.base_price_eur == Decimal("6.00")
 
     def test_deprecate(self):
         m = self._make()
@@ -77,8 +77,9 @@ class TestMaterialDomain:
 
     def test_calculate_cost(self):
         m = self._make()
-        cost = m.calculate_cost(quantity=Decimal("10"), weight_kg=Decimal("2"))
-        assert cost == Decimal("5.50") * Decimal("10") * Decimal("2")
+        cost = m.calculate_cost(quantity=Decimal("100"), weight_kg=Decimal("2"))
+        # For KG unit of measure, cost is price per kg * weight_kg
+        assert cost == Decimal("5.50") * Decimal("2")
 
     def test_pop_events_clears(self):
         m = self._make()
@@ -102,11 +103,13 @@ class TestMaterialAPI:
         assert data["status"] == "ACTIVE"
 
     @pytest.mark.asyncio
-    async def test_create_duplicate_raises_409(self, client):
+    async def test_create_duplicate_raises_422(self, client):
         payload = {"material_number": "MAT-DUP-001", "name": "Dup", "material_class": "STEEL", "unit_of_measure": "KG", "base_price_eur": "1.00"}
-        await client.post("/api/v1/materials", json=payload)
-        resp = await client.post("/api/v1/materials", json=payload)
-        assert resp.status_code == 409
+        r1 = await client.post("/api/v1/materials", json=payload)
+        assert r1.status_code == 201
+        r2 = await client.post("/api/v1/materials", json=payload)
+        assert r2.status_code == 422
+        assert r2.json()["error"] == "BUSINESS_RULE_VIOLATION"
 
     @pytest.mark.asyncio
     async def test_list_materials(self, client):

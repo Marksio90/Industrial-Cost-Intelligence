@@ -219,6 +219,10 @@ class Material:
         return self._base_price
 
     @property
+    def base_price_eur(self) -> Decimal:
+        return self._base_price.amount
+
+    @property
     def status(self) -> MaterialStatus:
         return self._status
 
