@@ -47,8 +47,8 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def validate_db_url(cls, v: str) -> str:
-        if not v.startswith("postgresql"):
-            raise ValueError("Only PostgreSQL is supported")
+        if not (v.startswith("postgresql") or v.startswith("sqlite+aiosqlite")):
+            raise ValueError("Only PostgreSQL or SQLite+aiosqlite is supported")
         return v
 
 
