@@ -218,7 +218,9 @@ services:
   # └──────────────────────────────────────────────────────────────────────┘
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.13.0
+    build:
+      context: .
+      dockerfile: docker/mlflow/Dockerfile
     <<: *restart-policy
     container_name: ici_mlflow
     hostname: mlflow
